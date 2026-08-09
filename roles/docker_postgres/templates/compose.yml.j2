@@ -6,6 +6,10 @@ networks:
     name: "{{ docker_postgres.network.name }}"
     driver: bridge
     internal: true
+  admin:
+    name: "{{ docker_postgres.admin_network.name }}"
+    driver: bridge
+    internal: false
 
 secrets:
   postgres_password:
@@ -37,6 +41,9 @@ services:
       database:
         aliases:
           - "{{ docker_postgres.network.alias }}"
+      admin:
+        aliases:
+          - "{{ docker_postgres.admin_network.alias }}"
     ports:
       - name: postgres-admin
         target: 5432

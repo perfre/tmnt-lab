@@ -20,6 +20,9 @@ docker_postgres:
   network:
     name: tmnt_postgres
     alias: postgres
+  admin_network:
+    name: tmnt_postgres_admin
+    alias: postgres-admin
   admin_user: postgres
   admin_password: LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE
 

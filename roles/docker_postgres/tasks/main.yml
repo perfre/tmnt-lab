@@ -11,6 +11,9 @@
       - docker_postgres.image is not search(':latest$')
       - docker_postgres.network.name | length > 0
       - docker_postgres.network.alias | length > 0
+      - docker_postgres.admin_network.name | length > 0
+      - docker_postgres.admin_network.alias | length > 0
+      - docker_postgres.admin_network.name != docker_postgres.network.name
       - docker_postgres.admin_user == 'postgres'
       - docker_postgres.admin_password == 'LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE'
     fail_msg: >-
@@ -39,8 +42,8 @@
     content: "{{ docker_postgres.admin_password }}\n"
     dest: "{{ docker_postgres.project_dir }}/postgres-password"
     owner: root
-    group: root
-    mode: "0600"
+    group: "999"
+    mode: "0640"
   no_log: true
   diff: false
   notify: Restart docker postgres compose

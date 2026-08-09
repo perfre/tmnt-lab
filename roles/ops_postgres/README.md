@@ -12,4 +12,4 @@ ops_postgres:
       owner: application
 ```
 
-This version is localhost-lab only and installs the target host's Psycopg driver package. It connects through the loopback-only port owned by `docker_postgres`. Run it after that role. Production use requires Vault or an approved secret source plus verified PostgreSQL TLS.
+This version is localhost-lab only and installs the target host's Psycopg driver package. It connects through the loopback-only administrative port owned by `docker_postgres`; that port is published through the separate `tmnt_postgres_admin` network while application consumers stay on the internal `tmnt_postgres` network. Run it after that role. Production use requires Vault or an approved secret source plus verified PostgreSQL TLS.
