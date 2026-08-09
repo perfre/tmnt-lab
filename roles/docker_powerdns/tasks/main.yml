@@ -1,0 +1,104 @@
+---
+- name: Validate docker_powerdns localhost lab configuration
+  ansible.builtin.assert:
+    that:
+      - docker_powerdns is mapping
+      - docker_powerdns.lab_mode | bool
+      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - docker_powerdns.bind_address in ['127.0.0.1', '::1']
+      - docker_powerdns.image is not search(':latest$')
+      - docker_powerdns.project_dir | length > 0
+      - docker_powerdns.config_file | length > 0
+      - docker_powerdns.dns.container_port | int >= 1024
+      - docker_powerdns.dns.container_port | int <= 65535
+      - docker_powerdns.dns.published_port | int >= 1024
+      - docker_powerdns.dns.published_port | int <= 65535
+      - docker_powerdns.database.host | length > 0
+      - docker_powerdns.database.port | int > 0
+      - docker_powerdns.database.port | int <= 65535
+      - docker_powerdns.database.name is match('^[A-Za-z0-9_]+$')
+      - docker_powerdns.database.user is match('^[A-Za-z0-9_]+$')
+      - docker_powerdns.database.password == 'LAB_ONLY_POWERDNS_MARIADB_PASSWORD_DO_NOT_REUSE'
+      - docker_powerdns.database.network.external | bool
+      - docker_powerdns.database.network.name | length > 0
+      - docker_powerdns.api.enabled | bool
+      - docker_powerdns.api.port | int >= 1024
+      - docker_powerdns.api.port | int <= 65535
+      - docker_powerdns.api.key == 'LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE'
+      - docker_powerdns.api.webserver_password == 'LAB_ONLY_POWERDNS_WEBSERVER_PASSWORD_DO_NOT_REUSE'
+      - docker_powerdns.api.allow_from is sequence
+      - docker_powerdns.api.allow_from | length > 0
+      - docker_powerdns.api.network.name | length > 0
+      - docker_powerdns.api.network.subnet | length > 0
+      - docker_powerdns.recursor_network.name | length > 0
+      - docker_powerdns.recursor_network.subnet | length > 0
+      - docker_powerdns.recursor_network.alias | length > 0
+    fail_msg: >-
+      docker_powerdns currently supports disposable localhost lab deployments only.
+      Keep lab_mode enabled, target loopback, pin the image, use the synthetic
+      database/API credentials, and keep DNS on unprivileged loopback ports.
+
+- name: Ensure PowerDNS authoritative project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_powerdns.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Render PowerDNS authoritative configuration
+  ansible.builtin.template:
+    src: pdns.conf.j2
+    dest: "{{ docker_powerdns.config_file }}"
+    owner: root
+    group: "{{ docker_powerdns.run_gid }}"
+    mode: "0640"
+  no_log: true
+  diff: false
+  notify: Restart docker powerdns compose
+
+- name: Render PowerDNS authoritative Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_powerdns.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker powerdns compose
+
+- name: Install PowerDNS authoritative Compose systemd unit
+  ansible.builtin.template:
+    src: docker-powerdns.service.j2
+    dest: /etc/systemd/system/docker-powerdns.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker powerdns compose
+
+- name: Enable PowerDNS authoritative Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-powerdns
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update PowerDNS authoritative Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_powerdns.project_dir }}"
+    project_name: "{{ docker_powerdns.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_powerdns.docker_binary }}"
+    state: present
+    pull: "{{ docker_powerdns.pull_policy }}"
+    recreate: "{{ docker_powerdns.recreate }}"
+    remove_orphans: "{{ docker_powerdns.remove_orphans | bool }}"
+    wait: "{{ docker_powerdns.wait | bool }}"
+    wait_timeout: "{{ docker_powerdns.wait_timeout }}"
+  when: docker_powerdns.apply | bool

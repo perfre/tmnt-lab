@@ -1,0 +1,65 @@
+---
+docker_powerdns:  # noqa: var-naming[no-role-prefix]
+  project_name: powerdns
+  project_dir: /opt/docker/powerdns
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: 120
+  restart: unless-stopped
+
+  # This first PowerDNS authoritative role is intentionally localhost-lab only.
+  lab_mode: true
+  bind_address: 127.0.0.1
+  image: docker.io/powerdns/pdns-auth-51:5.1.4
+  timezone: Europe/Stockholm
+  run_uid: "953"
+  run_gid: "953"
+
+  config_file: /opt/docker/powerdns/pdns.conf
+
+  dns:
+    local_address: 0.0.0.0
+    container_port: 5300
+    published_port: 5300
+
+  database:
+    host: mariadb
+    port: "3306"
+    name: powerdns
+    user: powerdns
+    password: ""
+    network:
+      name: tmnt_mariadb
+      external: true
+
+  api:
+    enabled: true
+    address: 0.0.0.0
+    port: 8081
+    key: LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE
+    webserver_password: LAB_ONLY_POWERDNS_WEBSERVER_PASSWORD_DO_NOT_REUSE
+    allow_from:
+      - 127.0.0.0/8
+      - ::1/128
+      - 172.28.53.0/24
+    network:
+      name: tmnt_powerdns_api
+      subnet: 172.28.53.0/24
+
+  recursor_network:
+    name: tmnt_powerdns_dns
+    subnet: 172.28.54.0/24
+    alias: powerdns-auth
+
+  security:
+    version_string: anonymous
+    dnssec: true
+
+  resources:
+    memory_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256

@@ -62,6 +62,18 @@
     - role: docker_librenms
       tags: [docker_librenms]
 
+- name: Deploy PowerDNS lab stack
+  hosts: powerdns
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_powerdns
+      tags: [docker_powerdns]
+    - role: docker_powerdns_recursor
+      tags: [docker_powerdns_recursor]
+    - role: docker_poweradmin
+      tags: [docker_poweradmin]
+
 - hosts: netbox
   become: true
   gather_facts: true

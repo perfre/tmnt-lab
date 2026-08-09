@@ -1,0 +1,16 @@
+[Unit]
+Description=Poweradmin Docker Compose lab
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_poweradmin.project_dir }}
+ExecStart={{ docker_poweradmin.docker_binary }} compose -f {{ docker_poweradmin.project_dir }}/compose.yml up -d --pull {{ docker_poweradmin.pull_policy }} --remove-orphans
+ExecStop={{ docker_poweradmin.docker_binary }} compose -f {{ docker_poweradmin.project_dir }}/compose.yml down
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

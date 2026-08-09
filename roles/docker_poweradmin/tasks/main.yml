@@ -1,0 +1,246 @@
+---
+- name: Validate docker_poweradmin configuration and localhost boundary
+  ansible.builtin.assert:
+    that:
+      - docker_poweradmin is mapping
+      - docker_poweradmin.lab_mode | bool
+      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - docker_poweradmin.bind_address in ['127.0.0.1', '::1']
+      - docker_poweradmin.image is not search(':latest$')
+      - docker_poweradmin.proxy.image is not search(':latest$')
+      - docker_poweradmin.project_dir | length > 0
+      - docker_poweradmin.secrets_dir | length > 0
+      - docker_poweradmin.web.hostname | length > 0
+      - docker_poweradmin.web.https_port | int >= 1024
+      - docker_poweradmin.web.https_port | int <= 65535
+      - docker_poweradmin.app_port | int >= 1024
+      - docker_poweradmin.app_port | int <= 65535
+      - docker_poweradmin.database.type in ['mysql']
+      - docker_poweradmin.database.host | length > 0
+      - docker_poweradmin.database.port | int > 0
+      - docker_poweradmin.database.port | int <= 65535
+      - docker_poweradmin.database.name is match('^[A-Za-z0-9_]+$')
+      - docker_poweradmin.database.user is match('^[A-Za-z0-9_]+$')
+      - docker_poweradmin.database.password == 'LAB_ONLY_POWERADMIN_MARIADB_PASSWORD_DO_NOT_REUSE'
+      - docker_poweradmin.database.init_pdns_schema | bool
+      - docker_poweradmin.database.network.external | bool
+      - docker_poweradmin.database.network.name | length > 0
+      - docker_poweradmin.powerdns_api.url is match('^http://[^/]+:[0-9]+$')
+      - docker_poweradmin.powerdns_api.key == 'LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE'
+      - docker_poweradmin.powerdns_api.network.external | bool
+      - docker_poweradmin.powerdns_api.network.name | length > 0
+      - docker_poweradmin.admin.create | bool
+      - docker_poweradmin.admin.username is match('^[A-Za-z0-9_.-]+$')
+      - docker_poweradmin.admin.password == 'LAB_ONLY_POWERADMIN_ADMIN_PASSWORD_DO_NOT_REUSE'
+      - docker_poweradmin.session_key == 'LAB_ONLY_POWERADMIN_SESSION_KEY_DO_NOT_REUSE_0123456789abcdef'
+      - docker_poweradmin.security.password_encryption in ['bcrypt', 'argon2i', 'argon2id']
+      - docker_poweradmin.pki.leaf_validity_days | int <= 397
+      - docker_poweradmin.pki.renew_before_days | int > 0
+      - docker_poweradmin.pki.renew_before_days | int < docker_poweradmin.pki.leaf_validity_days | int
+      - docker_poweradmin.pki.subject_alt_names is sequence
+      - docker_poweradmin.pki.subject_alt_names | length > 0
+    fail_msg: >-
+      docker_poweradmin is a disposable localhost-only role. It requires lab_mode=true,
+      loopback binding, pinned images, synthetic lab credentials, an external MariaDB
+      network, an internal PowerDNS API network, and a short-lived local TLS certificate.
+
+- name: Ensure Poweradmin project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_poweradmin.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_poweradmin.secrets_dir }}"
+      owner: root
+      group: "{{ docker_poweradmin.run_gid }}"
+      mode: "0750"
+    - path: "{{ docker_poweradmin.pki.dir }}"
+      owner: root
+      group: "101"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Generate disposable Poweradmin lab CA private key
+  community.crypto.openssl_privatekey:
+    path: "{{ docker_poweradmin.pki.dir }}/ca.key"
+    type: ECC
+    curve: secp384r1
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart docker poweradmin compose
+
+- name: Generate disposable Poweradmin lab CA certificate request
+  community.crypto.openssl_csr:
+    path: "{{ docker_poweradmin.pki.dir }}/ca.csr"
+    privatekey_path: "{{ docker_poweradmin.pki.dir }}/ca.key"
+    common_name: "{{ docker_poweradmin.pki.ca_common_name }}"
+    basic_constraints:
+      - CA:TRUE
+    basic_constraints_critical: true
+    key_usage:
+      - keyCertSign
+      - cRLSign
+    key_usage_critical: true
+    use_common_name_for_san: false
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart docker poweradmin compose
+
+- name: Issue disposable Poweradmin self-signed lab CA certificate
+  community.crypto.x509_certificate:
+    path: "{{ docker_poweradmin.pki.dir }}/ca.crt"
+    privatekey_path: "{{ docker_poweradmin.pki.dir }}/ca.key"
+    csr_path: "{{ docker_poweradmin.pki.dir }}/ca.csr"
+    provider: selfsigned
+    selfsigned_not_after: +3650d
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: Restart docker poweradmin compose
+
+- name: Generate Poweradmin lab TLS private key
+  community.crypto.openssl_privatekey:
+    path: "{{ docker_poweradmin.pki.dir }}/poweradmin.key"
+    type: ECC
+    curve: secp384r1
+    owner: root
+    group: "101"
+    mode: "0640"
+  no_log: true
+  notify: Restart docker poweradmin compose
+
+- name: Generate Poweradmin lab TLS certificate request
+  community.crypto.openssl_csr:
+    path: "{{ docker_poweradmin.pki.dir }}/poweradmin.csr"
+    privatekey_path: "{{ docker_poweradmin.pki.dir }}/poweradmin.key"
+    common_name: "{{ docker_poweradmin.pki.leaf_common_name }}"
+    subject_alt_name: "{{ docker_poweradmin.pki.subject_alt_names }}"
+    use_common_name_for_san: false
+    basic_constraints:
+      - CA:FALSE
+    basic_constraints_critical: true
+    key_usage:
+      - digitalSignature
+      - keyAgreement
+    key_usage_critical: true
+    extended_key_usage:
+      - serverAuth
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: Restart docker poweradmin compose
+
+- name: Check for an existing Poweradmin lab TLS certificate
+  ansible.builtin.stat:
+    path: "{{ docker_poweradmin.pki.dir }}/poweradmin.crt"
+  register: docker_poweradmin_leaf_certificate
+
+- name: Inspect Poweradmin lab TLS certificate renewal window
+  community.crypto.x509_certificate_info:
+    path: "{{ docker_poweradmin.pki.dir }}/poweradmin.crt"
+    valid_at:
+      renewal_window: "+{{ docker_poweradmin.pki.renew_before_days }}d"
+  register: docker_poweradmin_leaf_certificate_info
+  when: docker_poweradmin_leaf_certificate.stat.exists
+
+- name: Issue or renew Poweradmin lab TLS certificate
+  community.crypto.x509_certificate:
+    path: "{{ docker_poweradmin.pki.dir }}/poweradmin.crt"
+    csr_path: "{{ docker_poweradmin.pki.dir }}/poweradmin.csr"
+    ownca_path: "{{ docker_poweradmin.pki.dir }}/ca.crt"
+    ownca_privatekey_path: "{{ docker_poweradmin.pki.dir }}/ca.key"
+    provider: ownca
+    ownca_not_after: "+{{ docker_poweradmin.pki.leaf_validity_days }}d"
+    force: >-
+      {{
+        (not docker_poweradmin_leaf_certificate.stat.exists)
+        or (not (docker_poweradmin_leaf_certificate_info.valid_at.renewal_window | default(false)))
+      }}
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: Restart docker poweradmin compose
+
+- name: Render Poweradmin secret files
+  ansible.builtin.copy:
+    content: "{{ item.value }}\n"
+    dest: "{{ docker_poweradmin.secrets_dir }}/{{ item.name }}"
+    owner: root
+    group: "{{ docker_poweradmin.run_gid }}"
+    mode: "0640"
+  loop:
+    - name: db-password
+      value: "{{ docker_poweradmin.database.password }}"
+    - name: pdns-api-key
+      value: "{{ docker_poweradmin.powerdns_api.key }}"
+    - name: admin-password
+      value: "{{ docker_poweradmin.admin.password }}"
+    - name: session-key
+      value: "{{ docker_poweradmin.session_key }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  diff: false
+  notify: Restart docker poweradmin compose
+
+- name: Render Poweradmin TLS proxy configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ docker_poweradmin.project_dir }}/nginx.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker poweradmin compose
+
+- name: Render Poweradmin Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_poweradmin.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker poweradmin compose
+
+- name: Install Poweradmin Compose systemd unit
+  ansible.builtin.template:
+    src: docker-poweradmin.service.j2
+    dest: /etc/systemd/system/docker-poweradmin.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker poweradmin compose
+
+- name: Enable Poweradmin Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-poweradmin
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update Poweradmin Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_poweradmin.project_dir }}"
+    project_name: "{{ docker_poweradmin.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_poweradmin.docker_binary }}"
+    state: present
+    pull: "{{ docker_poweradmin.pull_policy }}"
+    recreate: "{{ docker_poweradmin.recreate }}"
+    remove_orphans: "{{ docker_poweradmin.remove_orphans | bool }}"
+    wait: "{{ docker_poweradmin.wait | bool }}"
+    wait_timeout: "{{ docker_poweradmin.wait_timeout }}"
+  when: docker_poweradmin.apply | bool

@@ -1,0 +1,60 @@
+---
+name: "{{ docker_powerdns_recursor.project_name }}"
+
+networks:
+  resolver:
+    driver: bridge
+{% if docker_powerdns_recursor.authoritative_network.enabled | bool %}
+  authoritative:
+    external: true
+    name: "{{ docker_powerdns_recursor.authoritative_network.name }}"
+{% endif %}
+
+services:
+  recursor:
+    image: "{{ docker_powerdns_recursor.image }}"
+    restart: "{{ docker_powerdns_recursor.restart }}"
+    pull_policy: "{{ docker_powerdns_recursor.pull_policy }}"
+    user: "{{ docker_powerdns_recursor.run_uid }}:{{ docker_powerdns_recursor.run_gid }}"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_powerdns_recursor.timezone }}"
+    healthcheck:
+      test: ["CMD-SHELL", "rec_control ping >/dev/null"]
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - resolver
+{% if docker_powerdns_recursor.authoritative_network.enabled | bool %}
+      - authoritative
+{% endif %}
+    ports:
+      - name: recursor-udp
+        target: {{ docker_powerdns_recursor.dns.container_port }}
+        published: {{ docker_powerdns_recursor.dns.published_port }}
+        host_ip: "{{ docker_powerdns_recursor.bind_address }}"
+        protocol: udp
+      - name: recursor-tcp
+        target: {{ docker_powerdns_recursor.dns.container_port }}
+        published: {{ docker_powerdns_recursor.dns.published_port }}
+        host_ip: "{{ docker_powerdns_recursor.bind_address }}"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: "{{ docker_powerdns_recursor.config_file }}"
+        target: /etc/powerdns/recursor.conf
+        read_only: true
+    tmpfs:
+      - /run:rw,noexec,nosuid,size=16m,uid={{ docker_powerdns_recursor.run_uid }},gid={{ docker_powerdns_recursor.run_gid }}
+      - /var/run/pdns-recursor:rw,noexec,nosuid,size=16m,uid={{ docker_powerdns_recursor.run_uid }},gid={{ docker_powerdns_recursor.run_gid }}
+      - /tmp:rw,noexec,nosuid,size=64m,uid={{ docker_powerdns_recursor.run_uid }},gid={{ docker_powerdns_recursor.run_gid }}
+    mem_limit: "{{ docker_powerdns_recursor.resources.memory_limit }}"
+    cpus: "{{ docker_powerdns_recursor.resources.cpus }}"
+    pids_limit: {{ docker_powerdns_recursor.resources.pids_limit }}

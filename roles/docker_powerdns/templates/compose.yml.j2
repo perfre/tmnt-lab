@@ -1,0 +1,73 @@
+---
+name: "{{ docker_powerdns.project_name }}"
+
+networks:
+  api:
+    name: "{{ docker_powerdns.api.network.name }}"
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: "{{ docker_powerdns.api.network.subnet }}"
+  recursor:
+    name: "{{ docker_powerdns.recursor_network.name }}"
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: "{{ docker_powerdns.recursor_network.subnet }}"
+  database:
+    external: {{ docker_powerdns.database.network.external | ternary('true', 'false') }}
+    name: "{{ docker_powerdns.database.network.name }}"
+
+services:
+  powerdns:
+    image: "{{ docker_powerdns.image }}"
+    restart: "{{ docker_powerdns.restart }}"
+    pull_policy: "{{ docker_powerdns.pull_policy }}"
+    user: "{{ docker_powerdns.run_uid }}:{{ docker_powerdns.run_gid }}"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_powerdns.timezone }}"
+    healthcheck:
+      test: ["CMD-SHELL", "pdns_control rping >/dev/null"]
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      api:
+        aliases:
+          - powerdns
+      recursor:
+        aliases:
+          - "{{ docker_powerdns.recursor_network.alias }}"
+      database: {}
+    ports:
+      - name: powerdns-udp
+        target: {{ docker_powerdns.dns.container_port }}
+        published: {{ docker_powerdns.dns.published_port }}
+        host_ip: "{{ docker_powerdns.bind_address }}"
+        protocol: udp
+      - name: powerdns-tcp
+        target: {{ docker_powerdns.dns.container_port }}
+        published: {{ docker_powerdns.dns.published_port }}
+        host_ip: "{{ docker_powerdns.bind_address }}"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: "{{ docker_powerdns.config_file }}"
+        target: /etc/powerdns/pdns.conf
+        read_only: true
+    tmpfs:
+      - /run:rw,noexec,nosuid,size=16m,uid={{ docker_powerdns.run_uid }},gid={{ docker_powerdns.run_gid }}
+      - /var/run/pdns:rw,noexec,nosuid,size=16m,uid={{ docker_powerdns.run_uid }},gid={{ docker_powerdns.run_gid }}
+      - /tmp:rw,noexec,nosuid,size=64m,uid={{ docker_powerdns.run_uid }},gid={{ docker_powerdns.run_gid }}
+    mem_limit: "{{ docker_powerdns.resources.memory_limit }}"
+    cpus: "{{ docker_powerdns.resources.cpus }}"
+    pids_limit: {{ docker_powerdns.resources.pids_limit }}

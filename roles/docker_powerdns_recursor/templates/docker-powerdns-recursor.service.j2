@@ -1,0 +1,16 @@
+[Unit]
+Description=PowerDNS recursor Docker Compose lab
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_powerdns_recursor.project_dir }}
+ExecStart={{ docker_powerdns_recursor.docker_binary }} compose -f {{ docker_powerdns_recursor.project_dir }}/compose.yml up -d --pull {{ docker_powerdns_recursor.pull_policy }} --remove-orphans
+ExecStop={{ docker_powerdns_recursor.docker_binary }} compose -f {{ docker_powerdns_recursor.project_dir }}/compose.yml down
+TimeoutStartSec=120
+
+[Install]
+WantedBy=multi-user.target

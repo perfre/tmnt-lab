@@ -98,7 +98,7 @@ Deploy the complete lab:
 ansible-playbook -K -i inventory-local/hosts.yml services.yml
 ```
 
-Before a complete deployment, read the MariaDB, PostgreSQL, LibreNMS, NetBox, Zabbix, and Atlassian role READMEs. The database refactor does not migrate data from older embedded database directories; application reconciliation can stop those old containers as orphans.
+Before a complete deployment, read the MariaDB, PostgreSQL, LibreNMS, NetBox, Zabbix, Atlassian, PowerDNS, and Poweradmin role READMEs. The database refactor does not migrate data from older embedded database directories; application reconciliation can stop those old containers as orphans.
 
 Deploy or check one component with tags and a limit:
 
@@ -120,13 +120,18 @@ Selecting only an application tag assumes its host and operational prerequisites
 | Confluence | `https://confluence.localhost:8444` | `/opt/docker/atlassian-lab/confluence` |
 | LibreNMS | `http://localhost:8000` | `/opt/docker/librenms` |
 | NetBox | `http://localhost:8001` | `/opt/docker/netbox` |
+| PowerDNS authoritative | `127.0.0.1:5300` TCP/UDP | MariaDB database `powerdns` |
+| PowerDNS Recursor | `127.0.0.1:5301` TCP/UDP | `/opt/docker/powerdns-recursor` |
+| Poweradmin | `https://poweradmin.localhost:8445` | MariaDB database `powerdns` |
 | Zabbix | `http://localhost:8080` | `/opt/docker/zabbix` |
 | MariaDB | loopback administration only | `/opt/docker/mariadb/data` |
 | PostgreSQL | loopback administration only | `/opt/docker/postgres/data` |
 
 MariaDB and PostgreSQL keep application traffic on internal Docker networks (`tmnt_mariadb`, `tmnt_postgres`) and publish loopback-only administrative listeners through separate admin networks (`tmnt_mariadb_admin`, `tmnt_postgres_admin`) for their matching `ops_*` roles.
 
-Only the Ollama, Atlassian, and shared-database additions currently enforce the repository's strict localhost lab boundary. Treat other plaintext or broadly bound endpoints as known remediation debt; do not expose this WSL environment to an untrusted network.
+PowerDNS authoritative owns the internal `tmnt_powerdns_api` network for Poweradmin API access and the internal `tmnt_powerdns_dns` network for optional recursor zone forwarding. Poweradmin initializes its own tables and the PowerDNS schema in the shared `powerdns` MariaDB database on first startup.
+
+Only the Ollama, Atlassian, PowerDNS, Poweradmin, and shared-database additions currently enforce the repository's strict localhost lab boundary. Treat other plaintext or broadly bound endpoints as known remediation debt; do not expose this WSL environment to an untrusted network.
 
 ## Production deployment
 
@@ -162,7 +167,7 @@ Production status:
 - `service_docker`: supports production Docker and optional NVIDIA CDI configuration.
 - `docker_ollama_server`: safe production runtime contract only when its API remains unpublished behind a separately managed authenticated TLS ingress.
 - `ops_ollama_models`: production-safe model pull/removal through container execution; API warm-up stays disabled until verified HTTPS ingress exists.
-- `docker_mariadb`, `docker_postgres`, `ops_mariadb`, `ops_postgres`, and `docker_atlassian_lab`: currently localhost-lab only.
+- `docker_mariadb`, `docker_postgres`, `ops_mariadb`, `ops_postgres`, `docker_atlassian_lab`, `docker_powerdns`, `docker_powerdns_recursor`, and `docker_poweradmin`: currently localhost-lab only.
 - LibreNMS, NetBox, Zabbix, OpenBao, and test-fixture roles still have production security debt. Do not treat them as production-ready without completing their TLS, secret, ingress, and image-pinning work.
 
 There is not yet a repository-owned production PKI or authenticated ingress role. That missing control is intentional and blocks public production exposure; do not work around it by publishing Ollama directly.

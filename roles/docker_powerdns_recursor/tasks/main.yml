@@ -1,0 +1,100 @@
+---
+- name: Validate docker_powerdns_recursor localhost lab configuration
+  ansible.builtin.assert:
+    that:
+      - docker_powerdns_recursor is mapping
+      - docker_powerdns_recursor.lab_mode | bool
+      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - docker_powerdns_recursor.bind_address in ['127.0.0.1', '::1']
+      - docker_powerdns_recursor.image is not search(':latest$')
+      - docker_powerdns_recursor.project_dir | length > 0
+      - docker_powerdns_recursor.config_file | length > 0
+      - docker_powerdns_recursor.dns.container_port | int >= 1024
+      - docker_powerdns_recursor.dns.container_port | int <= 65535
+      - docker_powerdns_recursor.dns.published_port | int >= 1024
+      - docker_powerdns_recursor.dns.published_port | int <= 65535
+      - docker_powerdns_recursor.dns.allow_from is sequence
+      - docker_powerdns_recursor.dns.allow_from | length > 0
+      - docker_powerdns_recursor.dnssec.validation in ['off', 'process-no-validate', 'process', 'log-fail', 'validate']
+      - docker_powerdns_recursor.authoritative_network.enabled is boolean
+      - (not docker_powerdns_recursor.authoritative_network.enabled | bool) or (docker_powerdns_recursor.authoritative_network.name | length > 0)
+      - docker_powerdns_recursor.forward_zones is sequence
+    fail_msg: >-
+      docker_powerdns_recursor currently supports disposable localhost lab deployments only.
+      Keep lab_mode enabled, target loopback, pin the image, and publish only
+      unprivileged resolver ports to loopback.
+
+- name: Validate PowerDNS recursor forward zones
+  ansible.builtin.assert:
+    that:
+      - item.zone is string
+      - item.zone | length > 0
+      - item.target is string
+      - item.target | length > 0
+    fail_msg: "Every docker_powerdns_recursor.forward_zones entry needs zone and target strings."
+  loop: "{{ docker_powerdns_recursor.forward_zones }}"
+  loop_control:
+    label: "{{ item.zone | default('undefined') }}"
+
+- name: Ensure PowerDNS recursor project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_powerdns_recursor.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Render PowerDNS recursor configuration
+  ansible.builtin.template:
+    src: recursor.yml.j2
+    dest: "{{ docker_powerdns_recursor.config_file }}"
+    owner: root
+    group: "{{ docker_powerdns_recursor.run_gid }}"
+    mode: "0640"
+  notify: Restart docker powerdns recursor compose
+
+- name: Render PowerDNS recursor Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_powerdns_recursor.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker powerdns recursor compose
+
+- name: Install PowerDNS recursor Compose systemd unit
+  ansible.builtin.template:
+    src: docker-powerdns-recursor.service.j2
+    dest: /etc/systemd/system/docker-powerdns-recursor.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker powerdns recursor compose
+
+- name: Enable PowerDNS recursor Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-powerdns-recursor
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update PowerDNS recursor Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_powerdns_recursor.project_dir }}"
+    project_name: "{{ docker_powerdns_recursor.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_powerdns_recursor.docker_binary }}"
+    state: present
+    pull: "{{ docker_powerdns_recursor.pull_policy }}"
+    recreate: "{{ docker_powerdns_recursor.recreate }}"
+    remove_orphans: "{{ docker_powerdns_recursor.remove_orphans | bool }}"
+    wait: "{{ docker_powerdns_recursor.wait | bool }}"
+    wait_timeout: "{{ docker_powerdns_recursor.wait_timeout }}"
+  when: docker_powerdns_recursor.apply | bool

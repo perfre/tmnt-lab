@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_powerdns_recursor
+  author: tmnt-lab
+  description: Run a disposable localhost-only PowerDNS Recursor with Docker Compose.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

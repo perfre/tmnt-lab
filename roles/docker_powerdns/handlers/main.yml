@@ -1,0 +1,8 @@
+---
+- name: Restart docker powerdns compose
+  ansible.builtin.systemd:
+    name: docker-powerdns
+    state: restarted
+    daemon_reload: true
+  no_log: true
+  when: docker_powerdns.apply | bool

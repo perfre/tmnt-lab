@@ -1,0 +1,48 @@
+---
+docker_powerdns_recursor:  # noqa: var-naming[no-role-prefix]
+  project_name: powerdns-recursor
+  project_dir: /opt/docker/powerdns-recursor
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 120
+  restart: unless-stopped
+
+  # This first recursor role is intentionally localhost-lab only.
+  lab_mode: true
+  bind_address: 127.0.0.1
+  image: docker.io/powerdns/pdns-recursor-54:5.4.5
+  timezone: Europe/Stockholm
+  run_uid: "953"
+  run_gid: "953"
+
+  config_file: /opt/docker/powerdns-recursor/recursor.conf
+
+  dns:
+    local_address: 0.0.0.0
+    container_port: 5301
+    published_port: 5301
+    allow_from:
+      - 127.0.0.0/8
+      - ::1/128
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+      - fc00::/7
+
+  authoritative_network:
+    enabled: true
+    name: tmnt_powerdns_dns
+
+  dnssec:
+    validation: validate
+
+  forward_zones: []
+
+  resources:
+    memory_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256

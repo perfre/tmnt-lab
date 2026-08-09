@@ -1,0 +1,158 @@
+---
+name: "{{ docker_poweradmin.project_name }}"
+
+networks:
+  frontend:
+    driver: bridge
+    internal: true
+  database:
+    external: {{ docker_poweradmin.database.network.external | ternary('true', 'false') }}
+    name: "{{ docker_poweradmin.database.network.name }}"
+  powerdns_api:
+    external: {{ docker_poweradmin.powerdns_api.network.external | ternary('true', 'false') }}
+    name: "{{ docker_poweradmin.powerdns_api.network.name }}"
+
+secrets:
+  db_password:
+    file: ./secrets/db-password
+  pdns_api_key:
+    file: ./secrets/pdns-api-key
+  admin_password:
+    file: ./secrets/admin-password
+  session_key:
+    file: ./secrets/session-key
+
+services:
+  poweradmin:
+    image: "{{ docker_poweradmin.image }}"
+    restart: "{{ docker_poweradmin.restart }}"
+    pull_policy: "{{ docker_poweradmin.pull_policy }}"
+    user: "{{ docker_poweradmin.run_uid }}:{{ docker_poweradmin.run_gid }}"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_poweradmin.timezone }}"
+      SERVER_PORT: "{{ docker_poweradmin.app_port }}"
+      DB_TYPE: "{{ docker_poweradmin.database.type }}"
+      DB_HOST: "{{ docker_poweradmin.database.host }}"
+      DB_PORT: "{{ docker_poweradmin.database.port }}"
+      DB_USER: "{{ docker_poweradmin.database.user }}"
+      DB_PASS__FILE: /run/secrets/db_password
+      DB_NAME: "{{ docker_poweradmin.database.name }}"
+      PA_INIT_PDNS_SCHEMA: "{{ docker_poweradmin.database.init_pdns_schema | ternary('true', 'false') }}"
+      PA_CREATE_ADMIN: "{{ docker_poweradmin.admin.create | ternary('true', 'false') }}"
+      PA_ADMIN_USERNAME: "{{ docker_poweradmin.admin.username }}"
+      PA_ADMIN_PASSWORD__FILE: /run/secrets/admin_password
+      PA_ADMIN_EMAIL: "{{ docker_poweradmin.admin.email }}"
+      PA_ADMIN_FULLNAME: "{{ docker_poweradmin.admin.full_name }}"
+      PA_SESSION_KEY__FILE: /run/secrets/session_key
+      PA_PDNS_API_URL: "{{ docker_poweradmin.powerdns_api.url }}"
+      PA_PDNS_API_KEY__FILE: /run/secrets/pdns_api_key
+      PA_PASSWORD_ENCRYPTION: "{{ docker_poweradmin.security.password_encryption }}"
+      PA_LOGIN_TOKEN_VALIDATION: "{{ docker_poweradmin.security.login_token_validation | ternary('true', 'false') }}"
+      PA_GLOBAL_TOKEN_VALIDATION: "{{ docker_poweradmin.security.global_token_validation | ternary('true', 'false') }}"
+      PA_MFA_ENABLED: "{{ docker_poweradmin.security.mfa_enabled | ternary('true', 'false') }}"
+      PA_LOCKOUT_ENABLED: "{{ docker_poweradmin.security.lockout_enabled | ternary('true', 'false') }}"
+      PA_LOCKOUT_ATTEMPTS: "{{ docker_poweradmin.security.lockout_attempts }}"
+      PA_LOCKOUT_DURATION: "{{ docker_poweradmin.security.lockout_duration }}"
+      PA_TIMEZONE: "{{ docker_poweradmin.timezone }}"
+      DNS_NS1: "{{ docker_poweradmin.dns.ns1 }}"
+      DNS_NS2: "{{ docker_poweradmin.dns.ns2 }}"
+      DNS_HOSTMASTER: "{{ docker_poweradmin.dns.hostmaster }}"
+    secrets:
+      - source: db_password
+        target: db_password
+        uid: "{{ docker_poweradmin.run_uid }}"
+        gid: "{{ docker_poweradmin.run_gid }}"
+        mode: 0440
+      - source: pdns_api_key
+        target: pdns_api_key
+        uid: "{{ docker_poweradmin.run_uid }}"
+        gid: "{{ docker_poweradmin.run_gid }}"
+        mode: 0440
+      - source: admin_password
+        target: admin_password
+        uid: "{{ docker_poweradmin.run_uid }}"
+        gid: "{{ docker_poweradmin.run_gid }}"
+        mode: 0440
+      - source: session_key
+        target: session_key
+        uid: "{{ docker_poweradmin.run_uid }}"
+        gid: "{{ docker_poweradmin.run_gid }}"
+        mode: 0440
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:{{ docker_poweradmin.app_port }}/ >/dev/null"]
+      start_period: 30s
+      interval: 30s
+      timeout: 5s
+      retries: 10
+    networks:
+      - frontend
+      - database
+      - powerdns_api
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid={{ docker_poweradmin.run_uid }},gid={{ docker_poweradmin.run_gid }}
+      - /app/config:rw,noexec,nosuid,size=16m,uid={{ docker_poweradmin.run_uid }},gid={{ docker_poweradmin.run_gid }}
+      - /app/var:rw,noexec,nosuid,size=128m,uid={{ docker_poweradmin.run_uid }},gid={{ docker_poweradmin.run_gid }}
+      - /var/caddy:rw,noexec,nosuid,size=16m,uid={{ docker_poweradmin.run_uid }},gid={{ docker_poweradmin.run_gid }}
+    mem_limit: "{{ docker_poweradmin.resources.memory_limit }}"
+    cpus: "{{ docker_poweradmin.resources.cpus }}"
+    pids_limit: {{ docker_poweradmin.resources.pids_limit }}
+
+  tls-proxy:
+    image: "{{ docker_poweradmin.proxy.image }}"
+    restart: "{{ docker_poweradmin.restart }}"
+    pull_policy: "{{ docker_poweradmin.pull_policy }}"
+    user: "101:101"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    depends_on:
+      poweradmin:
+        condition: service_healthy
+    networks:
+      - frontend
+    ports:
+      - name: poweradmin-https
+        target: {{ docker_poweradmin.web.https_port }}
+        published: {{ docker_poweradmin.web.https_port }}
+        host_ip: "{{ docker_poweradmin.bind_address }}"
+        protocol: tcp
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- https://127.0.0.1:{{ docker_poweradmin.web.https_port }}/nginx-health >/dev/null
+      start_period: 10s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ docker_poweradmin.project_dir }}/nginx.conf"
+        target: /etc/nginx/nginx.conf
+        read_only: true
+      - type: bind
+        source: "{{ docker_poweradmin.pki.dir }}/ca.crt"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+      - type: bind
+        source: "{{ docker_poweradmin.pki.dir }}/poweradmin.crt"
+        target: /etc/nginx/tls/poweradmin.crt
+        read_only: true
+      - type: bind
+        source: "{{ docker_poweradmin.pki.dir }}/poweradmin.key"
+        target: /etc/nginx/tls/poweradmin.key
+        read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    mem_limit: "{{ docker_poweradmin.proxy.memory_limit }}"
+    cpus: "{{ docker_poweradmin.proxy.cpus }}"
+    pids_limit: {{ docker_poweradmin.proxy.pids_limit }}

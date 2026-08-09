@@ -1,0 +1,21 @@
+---
+incoming:
+  listen:
+    - "{{ docker_powerdns_recursor.dns.local_address }}:{{ docker_powerdns_recursor.dns.container_port }}"
+  allow_from:
+{% for allowed_subnet in docker_powerdns_recursor.dns.allow_from %}
+    - "{{ allowed_subnet }}"
+{% endfor %}
+
+dnssec:
+  validation: "{{ docker_powerdns_recursor.dnssec.validation }}"
+
+{% if docker_powerdns_recursor.forward_zones | length > 0 %}
+recursor:
+  forward_zones:
+{% for forward_zone in docker_powerdns_recursor.forward_zones %}
+    - zone: "{{ forward_zone.zone }}"
+      forwarders:
+        - "{{ forward_zone.target }}"
+{% endfor %}
+{% endif %}

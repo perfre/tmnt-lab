@@ -1,0 +1,92 @@
+---
+docker_poweradmin:  # noqa: var-naming[no-role-prefix]
+  project_name: poweradmin
+  project_dir: /opt/docker/poweradmin
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 180
+  restart: unless-stopped
+
+  # This role is intentionally localhost-only and refuses non-lab operation.
+  lab_mode: true
+  bind_address: 127.0.0.1
+  timezone: Europe/Stockholm
+
+  image: docker.io/poweradmin/poweradmin:4.4.0
+  run_uid: "82"
+  run_gid: "82"
+  app_port: 8080
+
+  web:
+    hostname: poweradmin.localhost
+    https_port: 8445
+
+  proxy:
+    image: docker.io/library/nginx:1.28.0-alpine
+    memory_limit: 256m
+    cpus: "0.5"
+    pids_limit: 128
+
+  secrets_dir: /opt/docker/poweradmin/secrets
+  session_key: LAB_ONLY_POWERADMIN_SESSION_KEY_DO_NOT_REUSE_0123456789abcdef
+
+  admin:
+    create: true
+    username: admin
+    password: LAB_ONLY_POWERADMIN_ADMIN_PASSWORD_DO_NOT_REUSE
+    email: admin@localhost
+    full_name: Lab Administrator
+
+  database:
+    type: mysql
+    host: mariadb
+    port: "3306"
+    name: powerdns
+    user: poweradmin
+    password: ""
+    init_pdns_schema: true
+    network:
+      name: tmnt_mariadb
+      external: true
+
+  powerdns_api:
+    url: http://powerdns:8081
+    key: LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE
+    network:
+      name: tmnt_powerdns_api
+      external: true
+
+  dns:
+    ns1: ns1.powerdns.localhost
+    ns2: ns2.powerdns.localhost
+    hostmaster: hostmaster.powerdns.localhost
+
+  security:
+    password_encryption: argon2id
+    login_token_validation: true
+    global_token_validation: true
+    mfa_enabled: false
+    lockout_enabled: true
+    lockout_attempts: 5
+    lockout_duration: 15
+
+  pki:
+    dir: /opt/docker/poweradmin/pki
+    ca_common_name: tmnt-lab disposable Poweradmin CA
+    leaf_common_name: poweradmin.localhost
+    leaf_validity_days: 397
+    renew_before_days: 30
+    subject_alt_names:
+      - DNS:localhost
+      - DNS:poweradmin.localhost
+      - IP:127.0.0.1
+      - IP:::1
+
+  resources:
+    memory_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256

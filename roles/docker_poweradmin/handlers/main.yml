@@ -1,0 +1,8 @@
+---
+- name: Restart docker poweradmin compose
+  ansible.builtin.systemd:
+    name: docker-poweradmin
+    state: restarted
+    daemon_reload: true
+  no_log: true
+  when: docker_poweradmin.apply | bool
