@@ -124,6 +124,8 @@ Selecting only an application tag assumes its host and operational prerequisites
 | MariaDB | loopback administration only | `/opt/docker/mariadb/data` |
 | PostgreSQL | loopback administration only | `/opt/docker/postgres/data` |
 
+MariaDB keeps application traffic on the internal `tmnt_mariadb` Docker network and publishes the loopback-only administrative listener through a separate `tmnt_mariadb_admin` network for `ops_mariadb`.
+
 Only the Ollama, Atlassian, and shared-database additions currently enforce the repository's strict localhost lab boundary. Treat other plaintext or broadly bound endpoints as known remediation debt; do not expose this WSL environment to an untrusted network.
 
 ## Production deployment

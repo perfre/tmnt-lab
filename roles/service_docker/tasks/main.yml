@@ -2,7 +2,7 @@
 - name: Validate Docker host platform
   ansible.builtin.assert:
     that:
-      - ansible_facts.os_family in ['Debian', 'RedHat']
+      - ansible_facts["os_family"] in ['Debian', 'RedHat']
     fail_msg: "service_docker supports Debian/Ubuntu and RedHat-family hosts."
 
 - name: Validate Docker GPU configuration
@@ -19,11 +19,11 @@
 
 - name: Install Docker repository and packages on Debian family
   ansible.builtin.include_tasks: debian.yml
-  when: ansible_facts.os_family == 'Debian'
+  when: ansible_facts["os_family"] == 'Debian'
 
 - name: Install Docker repository and packages on RedHat family
   ansible.builtin.include_tasks: redhat.yml
-  when: ansible_facts.os_family == 'RedHat'
+  when: ansible_facts["os_family"] == 'RedHat'
 
 - name: Configure optional NVIDIA CDI support
   ansible.builtin.include_tasks: gpu_nvidia.yml

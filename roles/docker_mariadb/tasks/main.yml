@@ -11,6 +11,9 @@
       - docker_mariadb.image is not search(':latest$')
       - docker_mariadb.network.name | length > 0
       - docker_mariadb.network.alias | length > 0
+      - docker_mariadb.admin_network.name | length > 0
+      - docker_mariadb.admin_network.alias | length > 0
+      - docker_mariadb.admin_network.name != docker_mariadb.network.name
       - docker_mariadb.admin_password == 'LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE'
     fail_msg: >-
       docker_mariadb currently supports disposable localhost lab deployments only.
@@ -38,8 +41,8 @@
     content: "{{ docker_mariadb.admin_password }}\n"
     dest: "{{ docker_mariadb.project_dir }}/root-password"
     owner: root
-    group: root
-    mode: "0600"
+    group: "999"
+    mode: "0640"
   no_log: true
   diff: false
   notify: Restart docker mariadb compose

@@ -9,7 +9,7 @@
       Rocky: centos
       AlmaLinux: centos
       OracleLinux: centos
-    service_docker_rpm_distribution: "{{ service_docker_rpm_distribution_map.get(ansible_facts.distribution, 'centos') }}"
+    service_docker_rpm_distribution: "{{ service_docker_rpm_distribution_map.get(ansible_facts['distribution'], 'centos') }}"
   ansible.builtin.yum_repository:
     name: docker-{{ service_docker.channel }}
     description: Docker {{ service_docker.channel | title }} Repository

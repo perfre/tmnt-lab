@@ -6,6 +6,10 @@ networks:
     name: "{{ docker_mariadb.network.name }}"
     driver: bridge
     internal: true
+  admin:
+    name: "{{ docker_mariadb.admin_network.name }}"
+    driver: bridge
+    internal: false
 
 secrets:
   root_password:
@@ -40,6 +44,9 @@ services:
       database:
         aliases:
           - "{{ docker_mariadb.network.alias }}"
+      admin:
+        aliases:
+          - "{{ docker_mariadb.admin_network.alias }}"
     ports:
       - name: mariadb-admin
         target: 3306

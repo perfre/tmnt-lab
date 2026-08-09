@@ -14,4 +14,4 @@ ops_mariadb:
         "application.*": ALL
 ```
 
-This version is localhost-lab only and installs the target host's PyMySQL package. It connects through the loopback-only port owned by `docker_mariadb`. Run it after that role. Production use requires Vault or an approved secret source plus verified MariaDB TLS.
+This version is localhost-lab only and installs the target host's PyMySQL package. It connects through the loopback-only administrative port owned by `docker_mariadb`; that port is published through the separate `tmnt_mariadb_admin` network while application consumers stay on the internal `tmnt_mariadb` network. Run it after that role. Production use requires Vault or an approved secret source plus verified MariaDB TLS.

@@ -22,6 +22,22 @@ Treat insecure existing values as remediation debt, not as patterns to copy. In 
 
 ## Required work process
 
+### Local Ansible environment
+
+This WSL lab uses the repository bootstrap in `ansible-setup.sh` and `ansible-setup.env`:
+
+- Ansible is installed in a shared Python 3.12 virtual environment at `/opt/ansible`.
+- System-wide wrappers live in `/usr/local/bin`, including `/usr/local/bin/ansible-playbook` and `/usr/local/bin/deploy`.
+- The `deploy` wrapper activates the shared virtual environment and runs `ansible-playbook -i ~/dev/tmnt-lab/inventory-local/ --diff`.
+- Use `/usr/local/bin/deploy services.yml ...` for local lab role testing when exercising the disposable WSL lab inventory; add `-K` when Ansible needs a sudo prompt, and use the narrower syntax/check commands below when a full local run is unnecessary.
+- Treat local sudo credentials as secrets. Do not write them into repository files, command lines, logs, facts, task names, diffs, commits, or documentation; request them interactively only when needed.
+- Do not edit the external WSL system outside this repository without asking the user first. Repository file changes are allowed when these instructions are followed.
+
+### Git hygiene
+
+- Before editing files, run `git pull --ff-only` to check for upstream changes and preserve any existing local edits.
+- If the worktree already contains edited, staged, untracked, or otherwise pending files, ask whether those changes should be included in the next commit before committing.
+
 ### Architectural decision gate
 
 Before making files or changing runtime state for a request that introduces or materially changes architecture, present two or three viable options to the user. Explain the important tradeoffs, mark one path as recommended, and wait for the user's selection before proceeding. Read-only repository and environment discovery is allowed before the options because it makes them concrete. Do not treat minor implementation details or an already approved design as a new decision gate.
@@ -70,6 +86,7 @@ Current architectural decisions:
 
 - Keep one deployment playbook, `services.yml`, and express lab versus production behavior through separate inventories; do not fork near-duplicate lab and production playbooks.
 - Separate stateful service runtimes from their operational content. Database containers live in `docker_mariadb`/`docker_postgres`, database users and schemas in `ops_mariadb`/`ops_postgres`, the Ollama runtime in `docker_ollama_server`, and model lifecycle in `ops_ollama_models`.
+- Keep shared database application networks internal. When an operations role needs host-side administrative TCP, expose it through a separate database-owned admin network and bind lab listeners to loopback; production exposure still requires verified TLS and approved secret handling before relaxing lab assertions.
 - Use NVIDIA Container Device Interface (CDI) as the GPU contract. `service_docker` owns NVIDIA Container Toolkit installation and CDI refresh, never the physical-host GPU driver. GPU consumers request explicit `nvidia.com/gpu=...` devices.
 - Never expose Ollama's unauthenticated API directly in production. Lab mode may publish it on loopback; production attaches it to a separately owned authenticated TLS ingress network.
 
@@ -153,6 +170,7 @@ Dockerfiles must use a pinned, minimal trusted base, install only required packa
 - Use YAML starting with `---`, two-space indentation, booleans as `true`/`false`, quoted file modes, and fully qualified collection names.
 - Put overridable values in the role namespace. Do not introduce unscoped variables or depend on ambient variables from another role.
 - Validate type, allowed values, required fields, unsafe placeholders, port ranges, path constraints, and mutually dependent TLS settings with `ansible.builtin.assert` before mutating the host.
+- Do not introduce deprecated or announced-future-deprecated Ansible features. Treat deprecation warnings as defects to fix in scope; use `ansible_facts["fact_name"]` instead of top-level injected fact variables such as `ansible_os_family`.
 - Use modules instead of `command` or `shell`. If a command is unavoidable, make it injection-safe and define `changed_when`, `failed_when`, and check-mode behavior.
 - Use handlers for restarts. Template tasks that affect runtime behavior must notify the appropriate handler; unrelated changes must not restart services.
 - Set owner, group, and mode on every created directory and file. Use least privilege and preserve application UID/GID requirements.
@@ -172,6 +190,16 @@ ansible-lint .
 ```
 
 If `ansible-lint` is unavailable, report that rather than claiming it passed. For a changed role, also perform a check-mode run limited to a safe test host when the environment supports it. Never use check mode as proof of runtime correctness.
+
+For localhost lab role changes, test edits against the local WSL lab with the installed wrapper unless the user explicitly says not to:
+
+```bash
+/usr/local/bin/deploy services.yml --tags <role_tag> --limit <safe-host>
+```
+
+After a local lab deploy, verify the affected functionality, inspect service health/logs where relevant, and fix problems discovered during testing unless the user explicitly says not to continue.
+
+If testing requires wiping or reinitializing an existing MariaDB or PostgreSQL backend volume to verify database backend redeployment, ask the user first unless the requested task already explicitly approved that destructive reset. Non-destructive runs against existing database volumes may proceed under the normal validation rules.
 
 Before deployment, validate the rendered Compose model with `docker compose config --quiet`. For security or TLS changes, verify all of the following with non-secret evidence:
 
@@ -202,6 +230,8 @@ Maintain a tidy root `README.md` for users who have no prior knowledge of the re
 Never describe a lab-only configuration as production-ready. If the repository lacks a required production control, document the gap and the condition that must be met rather than supplying an insecure workaround.
 
 A deployment change is complete only when the role, `services.yml`, inventory example, and role README agree. Document security-relevant defaults, exposed ports, data ownership, backup implications, PKI names, renewal behavior, secret source, upgrade procedure, and rollback steps.
+
+When a role has been created or modified and the required tests pass, create a git commit with a clear message describing the role and behavior changed, then push it to the configured remote. Do not include secrets in commit messages, commit bodies, diffs, or pushed history; if push is unavailable, report the exact reason.
 
 Do not claim compliance merely because TLS is present. In the final report, distinguish:
 

@@ -16,7 +16,7 @@
       For WSL, install only the Windows NVIDIA driver; this role intentionally does not install a Linux driver.
 
 - name: Configure NVIDIA Container Toolkit on Debian family
-  when: ansible_facts.os_family == 'Debian'
+  when: ansible_facts["os_family"] == 'Debian'
   block:
     - name: Remove legacy NVIDIA Container Toolkit apt source
       ansible.builtin.file:
@@ -29,7 +29,7 @@
           x86_64: amd64
           aarch64: arm64
         service_docker_nvidia_arch: >-
-          {{ service_docker_nvidia_arch_map.get(ansible_facts.architecture, ansible_facts.architecture) }}
+          {{ service_docker_nvidia_arch_map.get(ansible_facts["architecture"], ansible_facts["architecture"]) }}
       ansible.builtin.deb822_repository:
         name: "{{ service_docker.gpu.nvidia.apt.repository_name }}"
         types:
@@ -53,7 +53,7 @@
         install_recommends: false
 
 - name: Configure NVIDIA Container Toolkit on RedHat family
-  when: ansible_facts.os_family == 'RedHat'
+  when: ansible_facts["os_family"] == 'RedHat'
   block:
     - name: Configure NVIDIA Container Toolkit yum repository
       ansible.builtin.yum_repository:

@@ -28,9 +28,9 @@
       armv6l: armhf
       ppc64le: ppc64el
       s390x: s390x
-    service_docker_apt_arch: "{{ service_docker_arch_map.get(ansible_facts.architecture, ansible_facts.architecture) }}"
-    service_docker_apt_codename: "{{ ansible_facts.distribution_release }}"
-    service_docker_apt_distribution: "{{ 'ubuntu' if ansible_facts.distribution == 'Ubuntu' else 'debian' }}"
+    service_docker_apt_arch: "{{ service_docker_arch_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+    service_docker_apt_codename: "{{ ansible_facts['distribution_release'] }}"
+    service_docker_apt_distribution: "{{ 'ubuntu' if ansible_facts['distribution'] == 'Ubuntu' else 'debian' }}"
   ansible.builtin.deb822_repository:
     name: "{{ service_docker.apt.repository_name }}"
     types:

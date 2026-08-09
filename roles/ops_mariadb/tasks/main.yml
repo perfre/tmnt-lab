@@ -12,7 +12,7 @@
       - ops_mariadb.login_password == 'LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE'
       - ops_mariadb.databases is sequence
       - ops_mariadb.users is sequence
-      - ansible_os_family in ops_mariadb.driver_packages
+      - ansible_facts["os_family"] in ops_mariadb.driver_packages
       - (ops_mariadb.databases | map(attribute='name') | list | unique | length) == (ops_mariadb.databases | length)
       - (ops_mariadb.users | map(attribute='name') | list | unique | length) == (ops_mariadb.users | length)
     fail_msg: >-
@@ -50,7 +50,7 @@
 
 - name: Install MariaDB Python driver
   ansible.builtin.package:
-    name: "{{ ops_mariadb.driver_packages[ansible_os_family] }}"
+    name: "{{ ops_mariadb.driver_packages[ansible_facts['os_family']] }}"
     state: present
 
 - name: Wait for the loopback MariaDB administrative endpoint

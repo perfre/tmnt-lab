@@ -20,6 +20,9 @@ docker_mariadb:
   network:
     name: tmnt_mariadb
     alias: mariadb
+  admin_network:
+    name: tmnt_mariadb_admin
+    alias: mariadb-admin
   admin_password: LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE
   timezone: Europe/Stockholm
 
