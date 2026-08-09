@@ -31,4 +31,6 @@ docker_netbox:
 
 NetBox Docker images should be upgraded deliberately. The default tag follows the current `netbox-docker` release branch compatibility pattern rather than an unpinned `latest`.
 
+The role renders `/opt/docker/netbox/config/zz_tmnt_lab_compatibility.py` and mounts it read-only into `/etc/netbox/config/`. This removes the image-provided deprecated `LOGIN_REQUIRED` configuration attribute while preserving NetBox's authenticated-only default behavior for NetBox v4.6 and the future v5.0 upgrade path.
+
 Deploy `docker_postgres` and `ops_postgres` before this role. For an existing installation, export `/opt/docker/netbox/postgres` and import it into the shared PostgreSQL service before switching the application; this refactor deliberately does not move or delete old database data.

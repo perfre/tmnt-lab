@@ -25,6 +25,7 @@
   loop:
     - "{{ docker_netbox.project_dir }}"
     - "{{ docker_netbox.project_dir }}/env"
+    - "{{ docker_netbox.data_dirs.config }}"
     - "{{ docker_netbox.data_dirs.redis }}"
     - "{{ docker_netbox.data_dirs.redis_cache }}"
     - "{{ docker_netbox.data_dirs.media }}"
@@ -47,6 +48,15 @@
       dest: redis-cache.env
   no_log: true
   diff: false
+  notify: Restart docker netbox compose
+
+- name: Render NetBox compatibility configuration
+  ansible.builtin.template:
+    src: compatibility.py.j2
+    dest: "{{ docker_netbox.data_dirs.config }}/zz_tmnt_lab_compatibility.py"
+    owner: root
+    group: root
+    mode: "0644"
   notify: Restart docker netbox compose
 
 - name: Render NetBox Docker Compose file

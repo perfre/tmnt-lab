@@ -1,0 +1,6 @@
+import sys
+
+netbox_docker_configuration = sys.modules.get("netbox.configuration.configuration")
+
+if netbox_docker_configuration is not None and hasattr(netbox_docker_configuration, "LOGIN_REQUIRED"):
+    delattr(netbox_docker_configuration, "LOGIN_REQUIRED")

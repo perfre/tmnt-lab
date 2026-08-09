@@ -24,6 +24,7 @@ docker_netbox:
     http_port: 8001
 
   data_dirs:
+    config: /opt/docker/netbox/config
     redis: /opt/docker/netbox/redis
     redis_cache: /opt/docker/netbox/redis-cache
     media: /opt/docker/netbox/media

@@ -35,6 +35,10 @@ services:
         protocol: tcp
     volumes: &netbox-volumes
       - type: bind
+        source: "{{ docker_netbox.data_dirs.config }}/zz_tmnt_lab_compatibility.py"
+        target: /etc/netbox/config/zz_tmnt_lab_compatibility.py
+        read_only: true
+      - type: bind
         source: "{{ docker_netbox.data_dirs.media }}"
         target: /opt/netbox/netbox/media
       - type: bind
