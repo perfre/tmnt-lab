@@ -129,7 +129,7 @@ Selecting only an application tag assumes its host and operational prerequisites
 
 MariaDB and PostgreSQL keep application traffic on internal Docker networks (`tmnt_mariadb`, `tmnt_postgres`) and publish loopback-only administrative listeners through separate admin networks (`tmnt_mariadb_admin`, `tmnt_postgres_admin`) for their matching `ops_*` roles.
 
-PowerDNS authoritative owns the internal `tmnt_powerdns_api` network for Poweradmin API access and the internal `tmnt_powerdns_dns` network for optional recursor zone forwarding. Poweradmin initializes its own tables and the PowerDNS schema in the shared `powerdns` MariaDB database on first startup.
+PowerDNS authoritative owns the internal `tmnt_powerdns_api` network for Poweradmin API access and the internal `tmnt_powerdns_dns` network for optional recursor zone forwarding. Poweradmin initializes its own tables and the PowerDNS schema in the shared `powerdns` MariaDB database on first startup. The local inventory explicitly publishes the Poweradmin Nginx GUI on `127.0.0.1:8445` as `https://poweradmin.localhost:8445`.
 
 Only the Ollama, Atlassian, PowerDNS, Poweradmin, and shared-database additions currently enforce the repository's strict localhost lab boundary. Treat other plaintext or broadly bound endpoints as known remediation debt; do not expose this WSL environment to an untrusted network.
 

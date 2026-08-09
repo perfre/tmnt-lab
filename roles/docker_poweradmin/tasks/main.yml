@@ -10,6 +10,7 @@
       - docker_poweradmin.proxy.image is not search(':latest$')
       - docker_poweradmin.project_dir | length > 0
       - docker_poweradmin.secrets_dir | length > 0
+      - docker_poweradmin.web.publish is boolean
       - docker_poweradmin.web.hostname | length > 0
       - docker_poweradmin.web.https_port | int >= 1024
       - docker_poweradmin.web.https_port | int <= 65535

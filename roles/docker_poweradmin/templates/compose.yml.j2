@@ -119,12 +119,14 @@ services:
         condition: service_healthy
     networks:
       - frontend
+{% if docker_poweradmin.web.publish | bool %}
     ports:
       - name: poweradmin-https
         target: {{ docker_poweradmin.web.https_port }}
         published: {{ docker_poweradmin.web.https_port }}
         host_ip: "{{ docker_poweradmin.bind_address }}"
         protocol: tcp
+{% endif %}
     healthcheck:
       test:
         - CMD-SHELL

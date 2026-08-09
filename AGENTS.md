@@ -40,7 +40,7 @@ This WSL lab uses the repository bootstrap in `ansible-setup.sh` and `ansible-se
 
 ### Architectural decision gate
 
-Before making files or changing runtime state for a request that introduces or materially changes architecture, present two or three viable options to the user. Explain the important tradeoffs, mark one path as recommended, and wait for the user's selection before proceeding. Read-only repository and environment discovery is allowed before the options because it makes them concrete. Do not treat minor implementation details or an already approved design as a new decision gate.
+Before making files or changing runtime state for a request that introduces or materially changes architecture, present two or three viable options for each decision and wait for the user's selection before proceeding. Number each decision sequentially (`1`, `2`, `3`, and so on), and label its options with uppercase letters in recommendation order: `A` is the most recommended option, `B` is the second choice, and so on. Explain the important tradeoffs for every option and clearly state that the lettering represents the recommendation ranking. When presenting multiple decisions, invite the user to answer compactly with the decision number and option letter, for example `1A 2B 3A`. Read-only repository and environment discovery is allowed before the options because it makes them concrete. Do not treat minor implementation details or an already approved design as a new decision gate.
 
 When a decision is approved, keep these instructions and the root `README.md` synchronized with any lasting convention, ownership boundary, deployment mode, or security choice created by that decision.
 

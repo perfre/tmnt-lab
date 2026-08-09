@@ -18,6 +18,7 @@ docker_poweradmin:
   lab_mode: true
   bind_address: 127.0.0.1
   web:
+    publish: true
     hostname: poweradmin.localhost
     https_port: 8445
   database:
@@ -34,7 +35,7 @@ Poweradmin initializes its own tables and the PowerDNS schema in the shared `pow
 
 ## Ports, Data, And Trust
 
-- Lab UI: `https://poweradmin.localhost:8445`
+- Lab UI: `https://poweradmin.localhost:8445` when `web.publish` is `true`
 - Runtime files: `/opt/docker/poweradmin`
 - Disposable public CA: `/opt/docker/poweradmin/pki/ca.crt`
 - Persistent application state: shared MariaDB database `powerdns`
@@ -50,6 +51,7 @@ ansible-playbook -i inventory-local/hosts.yml services.yml \
   --tags docker_mariadb,ops_mariadb,docker_powerdns,docker_poweradmin
 ```
 
+The local lab inventory explicitly publishes the Nginx GUI on `127.0.0.1:8445`.
 Open:
 
 - `https://poweradmin.localhost:8445`

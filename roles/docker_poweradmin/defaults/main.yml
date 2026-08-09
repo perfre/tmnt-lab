@@ -22,6 +22,7 @@ docker_poweradmin:  # noqa: var-naming[no-role-prefix]
   app_port: 8080
 
   web:
+    publish: true
     hostname: poweradmin.localhost
     https_port: 8445
 
