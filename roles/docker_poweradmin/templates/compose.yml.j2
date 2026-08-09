@@ -2,6 +2,10 @@
 name: "{{ docker_poweradmin.project_name }}"
 
 networks:
+{% if docker_poweradmin.web.publish | bool %}
+  ingress:
+    driver: bridge
+{% endif %}
   frontend:
     driver: bridge
     internal: true
@@ -118,6 +122,9 @@ services:
       poweradmin:
         condition: service_healthy
     networks:
+{% if docker_poweradmin.web.publish | bool %}
+      - ingress
+{% endif %}
       - frontend
 {% if docker_poweradmin.web.publish | bool %}
     ports:

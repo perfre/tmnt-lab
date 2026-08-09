@@ -42,6 +42,8 @@ Poweradmin initializes its own tables and the PowerDNS schema in the shared `pow
 
 Secrets are written below `/opt/docker/poweradmin/secrets` as `root:82` mode `0640` so the non-root container can read file-backed Compose secrets through `*_FILE` environment variables. The PowerDNS API connection is plaintext but stays on the internal `tmnt_powerdns_api` network and requires the synthetic API key.
 
+The Poweradmin app container stays on internal Docker networks only. When `web.publish` is `true`, only the Nginx TLS proxy joins a project-scoped non-internal `ingress` bridge so Docker can bind the loopback host port.
+
 The Nginx proxy allows TLS 1.2 and 1.3. Import only the generated public CA into browsers or clients used for this lab; never trust or reuse it outside localhost.
 
 ## Deploy
