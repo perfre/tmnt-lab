@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_netbox
+  author: tmnt-lab
+  description: Run NetBox using Docker Compose.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

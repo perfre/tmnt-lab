@@ -1,0 +1,71 @@
+---
+docker_librenms:
+  project_name: librenms
+  project_dir: /opt/docker/librenms
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: null
+  restart: unless-stopped
+  timezone: Europe/Stockholm
+  puid: "1000"
+  pgid: "1000"
+
+  image: librenms/librenms:latest
+  mariadb_image: mariadb:10
+  redis_image: redis:7.2-alpine
+  msmtpd_image: crazymax/msmtpd:latest
+
+  data_dir: /opt/docker/librenms/librenms
+  db_dir: /opt/docker/librenms/db
+
+  database:
+    name: librenms
+    user: librenms
+    password: librenms
+    root_password_random: true
+
+  web:
+    hostname: librenms
+    http_port: 8000
+
+  capabilities:
+    - NET_ADMIN
+    - NET_RAW
+
+  services:
+    dispatcher: true
+    syslogng: true
+    snmptrapd: true
+    msmtpd: true
+
+  librenms_env:
+    MEMORY_LIMIT: 256M
+    MAX_INPUT_VARS: "1000"
+    UPLOAD_MAX_SIZE: 16M
+    OPCACHE_MEM_SIZE: "128"
+    REAL_IP_FROM: 0.0.0.0/32
+    REAL_IP_HEADER: X-Forwarded-For
+    LOG_IP_VAR: remote_addr
+    CACHE_DRIVER: redis
+    SESSION_DRIVER: redis
+    REDIS_HOST: redis
+    LIBRENMS_SNMP_COMMUNITY: librenmsdocker
+    LIBRENMS_WEATHERMAP: "false"
+    LIBRENMS_WEATHERMAP_SCHEDULE: "*/5 * * * *"
+
+  msmtpd_env:
+    SMTP_HOST: ""
+    SMTP_PORT: "587"
+    SMTP_TLS: "on"
+    SMTP_STARTTLS: "on"
+    SMTP_TLS_CHECKCERT: "on"
+    SMTP_AUTH: "off"
+    SMTP_USER: ""
+    SMTP_PASSWORD: ""
+    SMTP_FROM: ""
+
+  extra_env: {}

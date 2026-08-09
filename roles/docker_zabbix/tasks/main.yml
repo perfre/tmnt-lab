@@ -1,0 +1,71 @@
+---
+- name: Validate docker_zabbix configuration
+  ansible.builtin.assert:
+    that:
+      - docker_zabbix is mapping
+      - docker_zabbix.project_dir | length > 0
+      - docker_zabbix.version_tag is match('^.+-7\\.4(-latest|\\.[0-9]+)?$')
+    fail_msg: "docker_zabbix must be a dictionary and version_tag should target Zabbix 7.4, for example alpine-7.4-latest."
+
+- name: Ensure Zabbix project directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ docker_zabbix.project_dir }}"
+    - "{{ docker_zabbix.postgres.data_dir }}"
+    - "{{ docker_zabbix.server.data_dir }}"
+
+- name: Ensure configured Zabbix bind mount sources exist
+  ansible.builtin.file:
+    path: "{{ item.source }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ docker_zabbix.plugin_mounts + docker_zabbix.agent.plugin_mounts + docker_zabbix.web.volumes }}"
+  when:
+    - docker_zabbix.create_mount_sources | bool
+    - item.source is defined
+
+- name: Render Zabbix Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_zabbix.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker zabbix compose
+
+- name: Install Zabbix Compose systemd unit
+  ansible.builtin.template:
+    src: docker-zabbix.service.j2
+    dest: /etc/systemd/system/docker-zabbix.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker zabbix compose
+
+- name: Enable Zabbix Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-zabbix
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update Zabbix Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_zabbix.project_dir }}"
+    project_name: "{{ docker_zabbix.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_zabbix.docker_binary }}"
+    state: present
+    pull: "{{ docker_zabbix.pull_policy }}"
+    recreate: "{{ docker_zabbix.recreate }}"
+    remove_orphans: "{{ docker_zabbix.remove_orphans | bool }}"
+    wait: "{{ docker_zabbix.wait | bool }}"
+    wait_timeout: "{{ docker_zabbix.wait_timeout | default(omit, true) }}"
+  when: docker_zabbix.apply | bool

@@ -1,0 +1,60 @@
+---
+docker_zabbix:
+  project_name: zabbix
+  project_dir: /opt/docker/zabbix
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: null
+  restart: unless-stopped
+  timezone: Europe/Stockholm
+
+  version_tag: alpine-7.4-latest
+
+  postgres:
+    image: postgres:17-alpine
+    database: zabbix
+    user: zabbix
+    password: zabbix
+    data_dir: /opt/docker/zabbix/postgres
+    env: {}
+
+  server:
+    image: zabbix/zabbix-server-pgsql
+    data_dir: /opt/docker/zabbix/server
+    ports:
+      - 10051:10051
+    env:
+      ZBX_STARTPOLLERS: "10"
+      ZBX_STARTPINGERS: "5"
+      ZBX_CACHESIZE: 128M
+      ZBX_HISTORYCACHESIZE: 64M
+      ZBX_TRENDCACHESIZE: 32M
+      ZBX_VALUECACHESIZE: 128M
+
+  web:
+    image: zabbix/zabbix-web-nginx-pgsql
+    http_port: 8080
+    https_port: null
+    env: {}
+    volumes: []
+
+  agent:
+    enabled: false
+    image: zabbix/zabbix-agent2
+    hostname: zabbix-server
+    env: {}
+    plugin_mounts: []
+
+  plugin_mounts:
+    - source: /opt/docker/zabbix/plugins/externalscripts
+      target: /usr/lib/zabbix/externalscripts
+      read_only: true
+    - source: /opt/docker/zabbix/plugins/modules
+      target: /var/lib/zabbix/modules
+      read_only: true
+
+  create_mount_sources: true

@@ -1,0 +1,85 @@
+---
+- name: Validate docker_netbox configuration
+  ansible.builtin.assert:
+    that:
+      - docker_netbox is mapping
+      - docker_netbox.project_dir | length > 0
+      - docker_netbox.database.password | length > 0
+      - docker_netbox.redis.password | length > 0
+      - docker_netbox.redis.cache_password | length > 0
+      - docker_netbox.security.secret_key | length >= 50
+    fail_msg: "docker_netbox must be a dictionary with project_dir, service passwords, and a secret_key of at least 50 characters."
+
+- name: Ensure NetBox project directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ docker_netbox.project_dir }}"
+    - "{{ docker_netbox.project_dir }}/env"
+    - "{{ docker_netbox.data_dirs.postgres }}"
+    - "{{ docker_netbox.data_dirs.redis }}"
+    - "{{ docker_netbox.data_dirs.redis_cache }}"
+    - "{{ docker_netbox.data_dirs.media }}"
+    - "{{ docker_netbox.data_dirs.reports }}"
+    - "{{ docker_netbox.data_dirs.scripts }}"
+
+- name: Render NetBox environment files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_netbox.project_dir }}/env/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - src: netbox.env.j2
+      dest: netbox.env
+    - src: postgres.env.j2
+      dest: postgres.env
+    - src: redis.env.j2
+      dest: redis.env
+    - src: redis-cache.env.j2
+      dest: redis-cache.env
+  notify: Restart docker netbox compose
+
+- name: Render NetBox Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_netbox.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker netbox compose
+
+- name: Install NetBox Compose systemd unit
+  ansible.builtin.template:
+    src: docker-netbox.service.j2
+    dest: /etc/systemd/system/docker-netbox.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker netbox compose
+
+- name: Enable NetBox Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-netbox
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update NetBox Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_netbox.project_dir }}"
+    project_name: "{{ docker_netbox.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_netbox.docker_binary }}"
+    state: present
+    pull: "{{ docker_netbox.pull_policy }}"
+    recreate: "{{ docker_netbox.recreate }}"
+    remove_orphans: "{{ docker_netbox.remove_orphans | bool }}"
+    wait: "{{ docker_netbox.wait | bool }}"
+    wait_timeout: "{{ docker_netbox.wait_timeout | default(omit, true) }}"
+  when: docker_netbox.apply | bool

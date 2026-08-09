@@ -1,0 +1,13 @@
+ui = {{ docker_openbao.config.ui | bool | ternary("true", "false") }}
+disable_mlock = {{ docker_openbao.config.disable_mlock | bool | ternary("true", "false") }}
+api_addr = "{{ docker_openbao.config.api_addr }}"
+cluster_addr = "{{ docker_openbao.config.cluster_addr }}"
+
+listener "tcp" {
+  address = "{{ docker_openbao.config.listener.address }}"
+  tls_disable = {{ docker_openbao.config.listener.tls_disable | bool | ternary("true", "false") }}
+}
+
+storage "file" {
+  path = "{{ docker_openbao.config.storage.file.path }}"
+}

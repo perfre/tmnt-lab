@@ -1,0 +1,37 @@
+---
+name: "{{ docker_snmpv3_testhost.project_name }}"
+
+networks:
+  snmpv3:
+{% if docker_snmpv3_testhost.network.external | bool %}
+    external: true
+    name: "{{ docker_snmpv3_testhost.network.name }}"
+{% else %}
+    name: "{{ docker_snmpv3_testhost.network.name }}"
+    driver: bridge
+{% endif %}
+
+services:
+{% for container in docker_snmpv3_testhost.containers | dict2items %}
+{% set cfg = container.value %}
+  {{ container.key }}:
+    image: "{{ cfg.image | default(docker_snmpv3_testhost.image_name) }}"
+    build:
+      context: ./image
+    container_name: "{{ cfg.container_name | default(container.key) }}"
+    hostname: "{{ cfg.hostname | default(container.key) }}"
+    restart: "{{ cfg.restart | default(docker_snmpv3_testhost.restart) }}"
+    networks:
+      - snmpv3
+{% if cfg.host_port is defined and cfg.host_port %}
+    ports:
+      - target: {{ cfg.listen_port | default(docker_snmpv3_testhost.listen_port) }}
+        published: {{ cfg.host_port }}
+        protocol: udp
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ docker_snmpv3_testhost.project_dir }}/{{ container.key }}"
+        target: /config
+        read_only: true
+{% endfor %}

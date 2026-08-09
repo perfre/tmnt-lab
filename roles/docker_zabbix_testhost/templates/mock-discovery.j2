@@ -1,0 +1,4 @@
+#!/bin/sh
+cat <<'JSON'
+{{ {"data": (item.value.mock_services | default(docker_zabbix_testhost.mock_services))} | to_json }}
+JSON

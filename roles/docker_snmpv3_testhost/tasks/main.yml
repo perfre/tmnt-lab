@@ -1,0 +1,93 @@
+---
+- name: Validate docker_snmpv3_testhost configuration
+  ansible.builtin.assert:
+    that:
+      - docker_snmpv3_testhost is mapping
+      - docker_snmpv3_testhost.containers is mapping
+      - docker_snmpv3_testhost.containers | length > 0
+    fail_msg: "docker_snmpv3_testhost must contain a containers dictionary."
+
+- name: Ensure SNMPv3 testhost project directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ [docker_snmpv3_testhost.project_dir, docker_snmpv3_testhost.project_dir + '/image'] + (docker_snmpv3_testhost.containers | dict2items | map(attribute='key') | map('regex_replace', '^', docker_snmpv3_testhost.project_dir + '/') | list) }}"
+
+- name: Render SNMPv3 testhost image files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_snmpv3_testhost.project_dir }}/image/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: Dockerfile.j2
+      dest: Dockerfile
+      mode: "0644"
+    - src: entrypoint.sh.j2
+      dest: entrypoint.sh
+      mode: "0755"
+  notify: Restart docker snmpv3 testhost compose
+
+- name: Render SNMPv3 testhost configuration
+  ansible.builtin.template:
+    src: "{{ item.1.src }}"
+    dest: "{{ docker_snmpv3_testhost.project_dir }}/{{ item.0.key }}/{{ item.1.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.1.mode }}"
+  loop: "{{ docker_snmpv3_testhost.containers | dict2items | product(snmpv3_testhost_templates) | list }}"
+  vars:
+    snmpv3_testhost_templates:
+      - src: snmpd.conf.j2
+        dest: snmpd.conf
+        mode: "0644"
+      - src: persistent-snmpd.conf.j2
+        dest: persistent-snmpd.conf
+        mode: "0600"
+  loop_control:
+    label: "{{ item.0.key }} {{ item.1.dest }}"
+  notify: Restart docker snmpv3 testhost compose
+
+- name: Render SNMPv3 testhost Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_snmpv3_testhost.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker snmpv3 testhost compose
+
+- name: Install SNMPv3 testhost Compose systemd unit
+  ansible.builtin.template:
+    src: docker-snmpv3-testhosts.service.j2
+    dest: /etc/systemd/system/docker-snmpv3-testhosts.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker snmpv3 testhost compose
+
+- name: Enable SNMPv3 testhost Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-snmpv3-testhosts
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update SNMPv3 testhost Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_snmpv3_testhost.project_dir }}"
+    project_name: "{{ docker_snmpv3_testhost.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_snmpv3_testhost.docker_binary }}"
+    state: present
+    pull: "{{ docker_snmpv3_testhost.pull_policy }}"
+    build: "{{ docker_snmpv3_testhost.build }}"
+    recreate: "{{ docker_snmpv3_testhost.recreate }}"
+    remove_orphans: "{{ docker_snmpv3_testhost.remove_orphans | bool }}"
+    wait: "{{ docker_snmpv3_testhost.wait | bool }}"
+    wait_timeout: "{{ docker_snmpv3_testhost.wait_timeout | default(omit, true) }}"
+  when: docker_snmpv3_testhost.apply | bool

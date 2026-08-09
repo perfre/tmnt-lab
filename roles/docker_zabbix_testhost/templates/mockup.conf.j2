@@ -1,0 +1,6 @@
+UnsafeUserParameters={{ (item.value.unsafe_user_parameters | default(docker_zabbix_testhost.unsafe_user_parameters)) | ternary(1, 0) }}
+UserParameter=mock.value[*],/var/lib/zabbix/mock/mock-value "$1"
+UserParameter=mock.discovery,/var/lib/zabbix/mock/mock-discovery
+{% for parameter in item.value.user_parameters | default([]) %}
+UserParameter={{ parameter.key }},{{ parameter.command }}
+{% endfor %}

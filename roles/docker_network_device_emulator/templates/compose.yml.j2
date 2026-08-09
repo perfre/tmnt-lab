@@ -1,0 +1,45 @@
+---
+name: "{{ docker_network_device_emulator.project_name }}"
+
+networks:
+  emulator:
+{% if docker_network_device_emulator.network.external | bool %}
+    external: true
+    name: "{{ docker_network_device_emulator.network.name }}"
+{% else %}
+    name: "{{ docker_network_device_emulator.network.name }}"
+    driver: bridge
+{% endif %}
+
+services:
+{% for device in docker_network_device_emulator.devices | dict2items %}
+  {{ device.key }}:
+    image: "{{ device.value.image | default(docker_network_device_emulator.image_name) }}"
+    build:
+      context: ./image
+    container_name: "{{ device.value.container_name | default(device.key) }}"
+    hostname: "{{ device.value.hostname | default(device.key) }}"
+    restart: "{{ device.value.restart | default(docker_network_device_emulator.restart) }}"
+    pull_policy: "{{ device.value.pull_policy | default(docker_network_device_emulator.pull_policy) }}"
+{% if device.value.extra_flags is defined %}
+    environment:
+      EXTRA_FLAGS: "{{ device.value.extra_flags }}"
+{% endif %}
+    networks:
+      - emulator
+    ports:
+      - target: 161
+        published: {{ device.value.host_port }}
+        protocol: udp
+    healthcheck:
+      test: ["CMD-SHELL", "snmpget -v2c -c {{ device.value.community }} -On -Oqv 127.0.0.1:161 {{ device.value.healthcheck_oid | default(docker_network_device_emulator.healthcheck_oid) }} >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - type: bind
+        source: "{{ docker_network_device_emulator.data_dir }}/{{ device.key }}"
+        target: /usr/local/snmpsim/data
+        read_only: true
+{% endfor %}

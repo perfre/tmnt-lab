@@ -1,0 +1,11 @@
+ansible
+ansible-navigator
+pyvmomi
+pymysql
+netaddr
+passlib
+helm
+diff
+kubernetes
+python3-ldap
+helm

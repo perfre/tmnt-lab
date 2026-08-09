@@ -1,0 +1,47 @@
+---
+service_docker:
+  state: latest
+  channel: stable
+  prune_old_packages: true
+  install_recommends: false
+  manage_service: true
+  service_name: docker
+
+  packages:
+    - docker-ce
+    - docker-ce-cli
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-compose-plugin
+
+  old_packages:
+    - docker
+    - docker-client
+    - docker-client-latest
+    - docker-common
+    - docker-engine
+    - docker.io
+    - docker-latest
+    - docker-latest-logrotate
+    - docker-logrotate
+    - containerd
+    - podman-docker
+    - runc
+
+  apt:
+    key_url: https://download.docker.com/linux
+    repository_name: docker
+    install_python_debian: true
+
+  yum:
+    gpgkey: https://download.docker.com/linux
+
+  daemon:
+    log-driver: json-file
+    log-opts:
+      max-size: 10m
+      max-file: "3"
+    storage-driver: overlay2
+    live-restore: true
+
+  users: []

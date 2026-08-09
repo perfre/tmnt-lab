@@ -1,0 +1,4 @@
+{% set values = docker_zabbix_testhost.mock_values | combine(item.value.mock_values | default({}), recursive=True) %}
+{% for key, value in values.items() %}
+{{ key }}={{ value }}
+{% endfor %}

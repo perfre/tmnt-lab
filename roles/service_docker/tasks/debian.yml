@@ -1,0 +1,57 @@
+---
+- name: Remove old Docker packages
+  ansible.builtin.apt:
+    name: "{{ service_docker.old_packages }}"
+    state: absent
+    purge: false
+  when: service_docker.prune_old_packages | bool
+
+- name: Install Docker apt repository prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+    state: present
+    update_cache: true
+    install_recommends: "{{ service_docker.install_recommends | bool }}"
+
+- name: Remove legacy Docker apt source list
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/{{ service_docker.apt.repository_name }}.list
+    state: absent
+
+- name: Configure Docker apt repository files
+  vars:
+    service_docker_arch_map:
+      x86_64: amd64
+      aarch64: arm64
+      armv7l: armhf
+      armv6l: armhf
+      ppc64le: ppc64el
+      s390x: s390x
+    service_docker_apt_arch: "{{ service_docker_arch_map.get(ansible_facts.architecture, ansible_facts.architecture) }}"
+    service_docker_apt_codename: "{{ ansible_facts.distribution_release }}"
+    service_docker_apt_distribution: "{{ 'ubuntu' if ansible_facts.distribution == 'Ubuntu' else 'debian' }}"
+  ansible.builtin.deb822_repository:
+    name: "{{ service_docker.apt.repository_name }}"
+    types:
+      - deb
+    uris:
+      - "https://download.docker.com/linux/{{ service_docker_apt_distribution }}"
+    suites:
+      - "{{ service_docker_apt_codename }}"
+    components:
+      - "{{ service_docker.channel }}"
+    architectures:
+      - "{{ service_docker_apt_arch }}"
+    signed_by: "{{ service_docker.apt.key_url }}/{{ service_docker_apt_distribution }}/gpg"
+    state: present
+    enabled: true
+    mode: "0644"
+    install_python_debian: "{{ service_docker.apt.install_python_debian | bool }}"
+
+- name: Install Docker CE packages
+  ansible.builtin.apt:
+    name: "{{ service_docker.packages }}"
+    state: "{{ service_docker.state }}"
+    update_cache: true
+    install_recommends: "{{ service_docker.install_recommends | bool }}"

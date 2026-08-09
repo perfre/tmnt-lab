@@ -1,0 +1,16 @@
+[Unit]
+Description=SNMPSim network device emulator Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_network_device_emulator.project_dir }}
+ExecStart={{ docker_network_device_emulator.docker_binary }} compose -f {{ docker_network_device_emulator.project_dir }}/compose.yml up -d --pull {{ docker_network_device_emulator.pull_policy }} --remove-orphans
+ExecStop={{ docker_network_device_emulator.docker_binary }} compose -f {{ docker_network_device_emulator.project_dir }}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

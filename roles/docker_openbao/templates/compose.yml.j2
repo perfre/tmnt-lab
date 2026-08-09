@@ -1,0 +1,39 @@
+---
+name: "{{ docker_openbao.project_name }}"
+
+services:
+  openbao:
+    image: "{{ docker_openbao.image }}"
+    container_name: "{{ docker_openbao.container_name }}"
+    hostname: "{{ docker_openbao.hostname }}"
+    restart: "{{ docker_openbao.restart }}"
+    pull_policy: "{{ docker_openbao.pull_policy }}"
+    command: server -config=/bao/config/openbao.hcl
+{% if docker_openbao.capabilities | length > 0 %}
+    cap_add:
+{% for capability in docker_openbao.capabilities %}
+      - "{{ capability }}"
+{% endfor %}
+{% endif %}
+    environment:
+{% for key, value in docker_openbao.env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    ports:
+{% for port in docker_openbao.ports %}
+      - "{{ port }}"
+{% endfor %}
+    volumes:
+      - type: bind
+        source: "{{ docker_openbao.config_dir }}"
+        target: /bao/config
+        read_only: true
+      - type: bind
+        source: "{{ docker_openbao.data_dir }}"
+        target: /bao/file
+{% for mount in docker_openbao.volumes %}
+      - type: bind
+        source: "{{ mount.source }}"
+        target: "{{ mount.target }}"
+        read_only: {{ mount.read_only | default(false) | ternary('true', 'false') }}
+{% endfor %}

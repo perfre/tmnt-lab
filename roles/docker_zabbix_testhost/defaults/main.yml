@@ -1,0 +1,50 @@
+---
+docker_zabbix_testhost:
+  project_name: zabbix-testhosts
+  project_dir: /opt/docker/zabbix-testhosts
+  docker_binary: /usr/bin/docker
+  image: zabbix/zabbix-agent2:alpine-7.4-latest
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: null
+  restart: unless-stopped
+  server_host: zabbix-server
+  server_active: zabbix-server
+  unsafe_user_parameters: true
+
+  network:
+    name: zabbix_zabbix
+    external: true
+
+  mock_values:
+    cpu.load: "0.42"
+    memory.used_mb: "512"
+    service.api.status: "1"
+    service.worker.status: "1"
+    app.queue.depth: "7"
+
+  random_ranges:
+    cpu.random:
+      min: 0
+      max: 100
+      format: "%.2f"
+    memory.random_mb:
+      min: 256
+      max: 8192
+      format: "%.0f"
+
+  mock_services:
+    - "{#SERVICE}": api
+    - "{#SERVICE}": worker
+
+  containers:
+    zbx-testhost01:
+      hostname: zbx-testhost01
+      host_metadata: linux mock
+      listen_port: 10050
+      host_port: null
+      env: {}
+      user_parameters: []

@@ -1,0 +1,3 @@
+{% set cfg = item.0.value %}
+{% set user = docker_snmpv3_testhost.default_user | combine(cfg.user | default({}), recursive=True) %}
+createUser {{ user.name }} {{ user.auth_protocol }} "{{ user.auth_password }}" {{ user.privacy_protocol }} "{{ user.privacy_password }}"

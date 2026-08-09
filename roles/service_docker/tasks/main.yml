@@ -1,0 +1,45 @@
+---
+- name: Validate Docker host platform
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.os_family in ['Debian', 'RedHat']
+    fail_msg: "service_docker supports Debian/Ubuntu and RedHat-family hosts."
+
+- name: Install Docker repository and packages on Debian family
+  ansible.builtin.include_tasks: debian.yml
+  when: ansible_facts.os_family == 'Debian'
+
+- name: Install Docker repository and packages on RedHat family
+  ansible.builtin.include_tasks: redhat.yml
+  when: ansible_facts.os_family == 'RedHat'
+
+- name: Ensure Docker configuration directory exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Docker daemon defaults
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+    content: "{{ service_docker.daemon | to_nice_json }}\n"
+  notify: Restart docker
+
+- name: Ensure Docker service is enabled and running
+  ansible.builtin.systemd:
+    name: "{{ service_docker.service_name }}"
+    enabled: true
+    state: started
+  when: service_docker.manage_service | bool
+
+- name: Add configured users to docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ service_docker.users }}"

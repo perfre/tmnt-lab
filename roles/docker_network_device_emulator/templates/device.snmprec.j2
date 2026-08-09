@@ -1,0 +1,21 @@
+{% set device = item.value %}
+1.3.6.1.2.1.1.1.0|4|{{ device.sysdescr }}
+1.3.6.1.2.1.1.2.0|6|{{ device.sysobjectid }}
+1.3.6.1.2.1.1.3.0|67|123456
+1.3.6.1.2.1.1.4.0|4|{{ device.syscontact | default("noc@example.invalid") }}
+1.3.6.1.2.1.1.5.0|4|{{ device.hostname | default(item.key) }}
+1.3.6.1.2.1.1.6.0|4|{{ device.syslocation | default("tmnt-lab") }}
+1.3.6.1.2.1.2.1.0|2|{{ device.interfaces | default([]) | length }}
+{% for iface in device.interfaces | default([]) %}
+1.3.6.1.2.1.2.2.1.1.{{ iface.index }}|2|{{ iface.index }}
+1.3.6.1.2.1.2.2.1.2.{{ iface.index }}|4|{{ iface.descr }}
+1.3.6.1.2.1.2.2.1.3.{{ iface.index }}|2|{{ iface.type | default(6) }}
+1.3.6.1.2.1.2.2.1.5.{{ iface.index }}|66|{{ iface.speed | default(1000000000) }}
+1.3.6.1.2.1.2.2.1.7.{{ iface.index }}|2|{{ iface.admin_status | default(1) }}
+1.3.6.1.2.1.2.2.1.8.{{ iface.index }}|2|{{ iface.oper_status | default(1) }}
+1.3.6.1.2.1.31.1.1.1.1.{{ iface.index }}|4|{{ iface.alias | default(iface.descr) }}
+1.3.6.1.2.1.31.1.1.1.15.{{ iface.index }}|66|{{ (iface.speed | default(1000000000) / 1000000) | int }}
+{% endfor %}
+{% for record in device.records | default([]) %}
+{{ record.oid }}|{{ record.type }}|{{ record.value }}
+{% endfor %}

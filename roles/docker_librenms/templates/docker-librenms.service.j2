@@ -1,0 +1,16 @@
+[Unit]
+Description=LibreNMS Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_librenms.project_dir }}
+ExecStart={{ docker_librenms.docker_binary }} compose -f {{ docker_librenms.project_dir }}/compose.yml up -d --pull {{ docker_librenms.pull_policy }} --remove-orphans
+ExecStop={{ docker_librenms.docker_binary }} compose -f {{ docker_librenms.project_dir }}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

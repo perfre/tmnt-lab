@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_snmpv3_testhost
+  author: tmnt-lab
+  description: Run configurable Linux SNMPv3 mock test hosts using Docker Compose.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

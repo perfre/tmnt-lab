@@ -1,0 +1,48 @@
+---
+name: "{{ docker_zabbix_testhost.project_name }}"
+
+networks:
+  testhosts:
+{% if docker_zabbix_testhost.network.external | bool %}
+    external: true
+    name: "{{ docker_zabbix_testhost.network.name }}"
+{% else %}
+    driver: bridge
+{% endif %}
+
+services:
+{% for container in docker_zabbix_testhost.containers | dict2items %}
+{% set cfg = container.value %}
+  {{ container.key }}:
+    image: "{{ cfg.image | default(docker_zabbix_testhost.image) }}"
+    container_name: "{{ cfg.container_name | default(container.key) }}"
+    hostname: "{{ cfg.hostname | default(container.key) }}"
+    restart: "{{ cfg.restart | default(docker_zabbix_testhost.restart) }}"
+    pull_policy: "{{ cfg.pull_policy | default(docker_zabbix_testhost.pull_policy) }}"
+    environment:
+      ZBX_HOSTNAME: "{{ cfg.hostname | default(container.key) }}"
+      ZBX_SERVER_HOST: "{{ cfg.server_host | default(docker_zabbix_testhost.server_host) }}"
+      ZBX_SERVER_ACTIVE: "{{ cfg.server_active | default(docker_zabbix_testhost.server_active) }}"
+      ZBX_LISTENPORT: "{{ cfg.listen_port | default(10050) }}"
+{% if cfg.host_metadata is defined %}
+      ZBX_HOSTMETADATA: "{{ cfg.host_metadata }}"
+{% endif %}
+{% for key, value in (cfg.env | default({})).items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    networks:
+      - testhosts
+{% if cfg.host_port is defined and cfg.host_port %}
+    ports:
+      - "{{ cfg.host_port }}:{{ cfg.listen_port | default(10050) }}"
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ docker_zabbix_testhost.project_dir }}/{{ container.key }}/zabbix_agent2.d/mockup.conf"
+        target: /etc/zabbix/zabbix_agent2.d/mockup.conf
+        read_only: true
+      - type: bind
+        source: "{{ docker_zabbix_testhost.project_dir }}/{{ container.key }}/mock"
+        target: /var/lib/zabbix/mock
+        read_only: true
+{% endfor %}

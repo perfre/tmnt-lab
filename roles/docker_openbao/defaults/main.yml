@@ -1,0 +1,38 @@
+---
+docker_openbao:
+  project_name: openbao
+  project_dir: /opt/docker/openbao
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: null
+  restart: unless-stopped
+
+  image: ghcr.io/openbao/openbao:latest
+  container_name: openbao
+  hostname: openbao
+  ports:
+    - 8200:8200
+  volumes: []
+  env:
+    BAO_ADDR: http://127.0.0.1:8200
+
+  data_dir: /opt/docker/openbao/data
+  config_dir: /opt/docker/openbao/config
+
+  config:
+    ui: true
+    disable_mlock: true
+    api_addr: http://0.0.0.0:8200
+    cluster_addr: http://0.0.0.0:8201
+    listener:
+      address: 0.0.0.0:8200
+      tls_disable: true
+    storage:
+      file:
+        path: /bao/file
+
+  capabilities: []

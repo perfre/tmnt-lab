@@ -1,0 +1,157 @@
+---
+name: "{{ docker_librenms.project_name }}"
+
+services:
+  db:
+    image: "{{ docker_librenms.mariadb_image }}"
+    container_name: librenms_db
+    command:
+      - mysqld
+      - --innodb-file-per-table=1
+      - --lower-case-table-names=0
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    restart: "{{ docker_librenms.restart }}"
+    environment:
+      TZ: "{{ docker_librenms.timezone }}"
+      MARIADB_RANDOM_ROOT_PASSWORD: "{{ docker_librenms.database.root_password_random | bool | ternary('yes', 'no') }}"
+      MYSQL_DATABASE: "{{ docker_librenms.database.name }}"
+      MYSQL_USER: "{{ docker_librenms.database.user }}"
+      MYSQL_PASSWORD: "{{ docker_librenms.database.password }}"
+    volumes:
+      - type: bind
+        source: "{{ docker_librenms.db_dir }}"
+        target: /var/lib/mysql
+
+  redis:
+    image: "{{ docker_librenms.redis_image }}"
+    container_name: librenms_redis
+    restart: "{{ docker_librenms.restart }}"
+    environment:
+      TZ: "{{ docker_librenms.timezone }}"
+
+{% if docker_librenms.services.msmtpd | bool %}
+  msmtpd:
+    image: "{{ docker_librenms.msmtpd_image }}"
+    container_name: librenms_msmtpd
+    restart: "{{ docker_librenms.restart }}"
+    env_file:
+      - ./msmtpd.env
+{% endif %}
+
+  librenms:
+    image: "{{ docker_librenms.image }}"
+    container_name: librenms
+    hostname: "{{ docker_librenms.web.hostname }}"
+    restart: "{{ docker_librenms.restart }}"
+    pull_policy: "{{ docker_librenms.pull_policy }}"
+    cap_add:
+{% for capability in docker_librenms.capabilities %}
+      - "{{ capability }}"
+{% endfor %}
+    depends_on:
+      - db
+      - redis
+{% if docker_librenms.services.msmtpd | bool %}
+      - msmtpd
+{% endif %}
+    ports:
+      - target: 8000
+        published: {{ docker_librenms.web.http_port }}
+        protocol: tcp
+    env_file:
+      - ./librenms.env
+    environment: &librenms-environment
+      TZ: "{{ docker_librenms.timezone }}"
+      PUID: "{{ docker_librenms.puid }}"
+      PGID: "{{ docker_librenms.pgid }}"
+      DB_HOST: db
+      DB_NAME: "{{ docker_librenms.database.name }}"
+      DB_USER: "{{ docker_librenms.database.user }}"
+      DB_PASSWORD: "{{ docker_librenms.database.password }}"
+      DB_TIMEOUT: "60"
+    volumes: &librenms-volumes
+      - type: bind
+        source: "{{ docker_librenms.data_dir }}"
+        target: /data
+
+{% if docker_librenms.services.dispatcher | bool %}
+  dispatcher:
+    image: "{{ docker_librenms.image }}"
+    container_name: librenms_dispatcher
+    hostname: librenms-dispatcher
+    restart: "{{ docker_librenms.restart }}"
+    pull_policy: "{{ docker_librenms.pull_policy }}"
+    cap_add:
+{% for capability in docker_librenms.capabilities %}
+      - "{{ capability }}"
+{% endfor %}
+    depends_on:
+      - librenms
+      - redis
+    env_file:
+      - ./librenms.env
+    environment:
+      <<: *librenms-environment
+      DISPATCHER_NODE_ID: dispatcher1
+      SIDECAR_DISPATCHER: "1"
+    volumes: *librenms-volumes
+{% endif %}
+
+{% if docker_librenms.services.syslogng | bool %}
+  syslogng:
+    image: "{{ docker_librenms.image }}"
+    container_name: librenms_syslogng
+    hostname: librenms-syslogng
+    restart: "{{ docker_librenms.restart }}"
+    pull_policy: "{{ docker_librenms.pull_policy }}"
+    cap_add:
+{% for capability in docker_librenms.capabilities %}
+      - "{{ capability }}"
+{% endfor %}
+    depends_on:
+      - librenms
+      - redis
+    ports:
+      - target: 514
+        published: 514
+        protocol: tcp
+      - target: 514
+        published: 514
+        protocol: udp
+    env_file:
+      - ./librenms.env
+    environment:
+      <<: *librenms-environment
+      SIDECAR_SYSLOGNG: "1"
+    volumes: *librenms-volumes
+{% endif %}
+
+{% if docker_librenms.services.snmptrapd | bool %}
+  snmptrapd:
+    image: "{{ docker_librenms.image }}"
+    container_name: librenms_snmptrapd
+    hostname: librenms-snmptrapd
+    restart: "{{ docker_librenms.restart }}"
+    pull_policy: "{{ docker_librenms.pull_policy }}"
+    cap_add:
+{% for capability in docker_librenms.capabilities %}
+      - "{{ capability }}"
+{% endfor %}
+    depends_on:
+      - librenms
+      - redis
+    ports:
+      - target: 162
+        published: 162
+        protocol: tcp
+      - target: 162
+        published: 162
+        protocol: udp
+    env_file:
+      - ./librenms.env
+    environment:
+      <<: *librenms-environment
+      SIDECAR_SNMPTRAPD: "1"
+    volumes: *librenms-volumes
+{% endif %}

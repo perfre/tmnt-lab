@@ -1,0 +1,124 @@
+---
+name: "{{ docker_zabbix.project_name }}"
+
+networks:
+  zabbix:
+    driver: bridge
+
+services:
+  postgres:
+    image: "{{ docker_zabbix.postgres.image }}"
+    restart: "{{ docker_zabbix.restart }}"
+    environment:
+      POSTGRES_DB: "{{ docker_zabbix.postgres.database }}"
+      POSTGRES_USER: "{{ docker_zabbix.postgres.user }}"
+      POSTGRES_PASSWORD: "{{ docker_zabbix.postgres.password }}"
+{% for key, value in docker_zabbix.postgres.env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - zabbix
+    volumes:
+      - type: bind
+        source: "{{ docker_zabbix.postgres.data_dir }}"
+        target: /var/lib/postgresql/data
+
+  zabbix-server:
+    image: "{{ docker_zabbix.server.image }}:{{ docker_zabbix.version_tag }}"
+    restart: "{{ docker_zabbix.restart }}"
+    pull_policy: "{{ docker_zabbix.pull_policy }}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_DB: "{{ docker_zabbix.postgres.database }}"
+      POSTGRES_USER: "{{ docker_zabbix.postgres.user }}"
+      POSTGRES_PASSWORD: "{{ docker_zabbix.postgres.password }}"
+{% for key, value in docker_zabbix.server.env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    networks:
+      - zabbix
+{% if docker_zabbix.server.ports | length > 0 %}
+    ports:
+{% for port in docker_zabbix.server.ports %}
+      - "{{ port }}"
+{% endfor %}
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ docker_zabbix.server.data_dir }}"
+        target: /var/lib/zabbix
+{% for mount in docker_zabbix.plugin_mounts %}
+      - type: bind
+        source: "{{ mount.source }}"
+        target: "{{ mount.target }}"
+        read_only: {{ mount.read_only | default(true) | ternary('true', 'false') }}
+{% endfor %}
+
+  zabbix-web:
+    image: "{{ docker_zabbix.web.image }}:{{ docker_zabbix.version_tag }}"
+    restart: "{{ docker_zabbix.restart }}"
+    pull_policy: "{{ docker_zabbix.pull_policy }}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      zabbix-server:
+        condition: service_started
+    environment:
+      DB_SERVER_HOST: postgres
+      POSTGRES_DB: "{{ docker_zabbix.postgres.database }}"
+      POSTGRES_USER: "{{ docker_zabbix.postgres.user }}"
+      POSTGRES_PASSWORD: "{{ docker_zabbix.postgres.password }}"
+      ZBX_SERVER_HOST: zabbix-server
+      PHP_TZ: "{{ docker_zabbix.timezone }}"
+{% for key, value in docker_zabbix.web.env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    networks:
+      - zabbix
+    ports:
+      - "{{ docker_zabbix.web.http_port }}:8080"
+{% if docker_zabbix.web.https_port %}
+      - "{{ docker_zabbix.web.https_port }}:8443"
+{% endif %}
+{% if docker_zabbix.web.volumes | length > 0 %}
+    volumes:
+{% for mount in docker_zabbix.web.volumes %}
+      - type: bind
+        source: "{{ mount.source }}"
+        target: "{{ mount.target }}"
+        read_only: {{ mount.read_only | default(true) | ternary('true', 'false') }}
+{% endfor %}
+{% endif %}
+
+{% if docker_zabbix.agent.enabled | bool %}
+  zabbix-agent2:
+    image: "{{ docker_zabbix.agent.image }}:{{ docker_zabbix.version_tag }}"
+    restart: "{{ docker_zabbix.restart }}"
+    pull_policy: "{{ docker_zabbix.pull_policy }}"
+    environment:
+      ZBX_HOSTNAME: "{{ docker_zabbix.agent.hostname }}"
+      ZBX_SERVER_HOST: zabbix-server
+      ZBX_SERVER_ACTIVE: zabbix-server
+{% for key, value in docker_zabbix.agent.env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    networks:
+      - zabbix
+{% if docker_zabbix.agent.plugin_mounts | length > 0 %}
+    volumes:
+{% for mount in docker_zabbix.agent.plugin_mounts %}
+      - type: bind
+        source: "{{ mount.source }}"
+        target: "{{ mount.target }}"
+        read_only: {{ mount.read_only | default(true) | ternary('true', 'false') }}
+{% endfor %}
+{% endif %}
+{% endif %}

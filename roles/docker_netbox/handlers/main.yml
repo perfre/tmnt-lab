@@ -1,0 +1,6 @@
+---
+- name: Restart docker netbox compose
+  ansible.builtin.systemd:
+    name: docker-netbox
+    state: restarted
+    daemon_reload: true

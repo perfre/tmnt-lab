@@ -1,0 +1,30 @@
+---
+- name: Configure Docker yum repository
+  vars:
+    service_docker_rpm_distribution_map:
+      Fedora: fedora
+      RedHat: rhel
+      RedHat Enterprise Linux: rhel
+      CentOS: centos
+      Rocky: centos
+      AlmaLinux: centos
+      OracleLinux: centos
+    service_docker_rpm_distribution: "{{ service_docker_rpm_distribution_map.get(ansible_facts.distribution, 'centos') }}"
+  ansible.builtin.yum_repository:
+    name: docker-{{ service_docker.channel }}
+    description: Docker {{ service_docker.channel | title }} Repository
+    baseurl: "https://download.docker.com/linux/{{ service_docker_rpm_distribution }}/$releasever/$basearch/{{ service_docker.channel }}"
+    enabled: true
+    gpgcheck: true
+    gpgkey: "{{ service_docker.yum.gpgkey }}/{{ service_docker_rpm_distribution }}/gpg"
+
+- name: Remove old Docker packages
+  ansible.builtin.package:
+    name: "{{ service_docker.old_packages }}"
+    state: absent
+  when: service_docker.prune_old_packages | bool
+
+- name: Install Docker CE packages
+  ansible.builtin.package:
+    name: "{{ service_docker.packages }}"
+    state: "{{ service_docker.state }}"

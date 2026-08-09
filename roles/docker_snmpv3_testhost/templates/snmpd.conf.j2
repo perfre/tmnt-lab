@@ -1,0 +1,14 @@
+{% set cfg = item.0.value %}
+agentAddress udp:0.0.0.0:{{ cfg.listen_port | default(docker_snmpv3_testhost.listen_port) }}
+sysLocation {{ cfg.syslocation | default(docker_snmpv3_testhost.syslocation) }}
+sysContact {{ cfg.syscontact | default(docker_snmpv3_testhost.syscontact) }}
+sysDescr {{ cfg.sysdescr | default("Linux SNMPv3 test host") }}
+sysObjectID {{ cfg.sysobjectid | default("1.3.6.1.4.1.8072.3.2.10") }}
+
+rouser {{ (docker_snmpv3_testhost.default_user | combine(cfg.user | default({}), recursive=True)).name }} {{ (docker_snmpv3_testhost.default_user | combine(cfg.user | default({}), recursive=True)).security_level }}
+
+extend hostname /bin/hostname
+extend uptime /usr/bin/uptime
+{% for scalar in cfg.scalars | default([]) %}
+pass {{ scalar.oid }} /bin/sh -c 'case "$1" in -g) printf "{{ scalar.oid }}\n{{ scalar.type }}\n{{ scalar.value }}\n" ;; *) exit 0 ;; esac'
+{% endfor %}

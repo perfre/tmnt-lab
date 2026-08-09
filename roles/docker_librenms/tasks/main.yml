@@ -1,0 +1,75 @@
+---
+- name: Validate docker_librenms configuration
+  ansible.builtin.assert:
+    that:
+      - docker_librenms is mapping
+      - docker_librenms.project_dir | length > 0
+      - docker_librenms.database.password | length > 0
+    fail_msg: "docker_librenms must be a dictionary with project_dir and database.password set."
+
+- name: Ensure LibreNMS project directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ docker_librenms.project_dir }}"
+    - "{{ docker_librenms.data_dir }}"
+    - "{{ docker_librenms.db_dir }}"
+
+- name: Render LibreNMS environment files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_librenms.project_dir }}/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+    - src: env.j2
+      dest: .env
+    - src: librenms.env.j2
+      dest: librenms.env
+    - src: msmtpd.env.j2
+      dest: msmtpd.env
+  notify: Restart docker librenms compose
+
+- name: Render LibreNMS Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_librenms.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker librenms compose
+
+- name: Install LibreNMS Compose systemd unit
+  ansible.builtin.template:
+    src: docker-librenms.service.j2
+    dest: /etc/systemd/system/docker-librenms.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker librenms compose
+
+- name: Enable LibreNMS Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-librenms
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update LibreNMS Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_librenms.project_dir }}"
+    project_name: "{{ docker_librenms.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_librenms.docker_binary }}"
+    state: present
+    pull: "{{ docker_librenms.pull_policy }}"
+    recreate: "{{ docker_librenms.recreate }}"
+    remove_orphans: "{{ docker_librenms.remove_orphans | bool }}"
+    wait: "{{ docker_librenms.wait | bool }}"
+    wait_timeout: "{{ docker_librenms.wait_timeout | default(omit, true) }}"
+  when: docker_librenms.apply | bool

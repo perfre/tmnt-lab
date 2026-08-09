@@ -1,0 +1,11 @@
+FROM {{ docker_network_device_emulator.base_image }}
+
+RUN apk add --no-cache net-snmp-tools
+RUN pip install --no-cache-dir snmpsim
+
+COPY entrypoint.sh /usr/local/bin/network-device-emulator-entrypoint
+RUN chmod 0755 /usr/local/bin/network-device-emulator-entrypoint
+
+EXPOSE 161/udp
+
+ENTRYPOINT ["/usr/local/bin/network-device-emulator-entrypoint"]

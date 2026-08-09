@@ -1,0 +1,82 @@
+---
+docker_netbox:
+  project_name: netbox
+  project_dir: /opt/docker/netbox
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: null
+  restart: unless-stopped
+
+  image: docker.io/netboxcommunity/netbox:v4.6-5.0.2
+  postgres_image: docker.io/postgres:18-alpine
+  valkey_image: docker.io/valkey/valkey:9.1-alpine
+
+  timezone: Europe/Stockholm
+  allowed_hosts:
+    - "*"
+  csrf_trusted_origins: []
+
+  web:
+    hostname: netbox
+    http_port: 8001
+
+  data_dirs:
+    postgres: /opt/docker/netbox/postgres
+    redis: /opt/docker/netbox/redis
+    redis_cache: /opt/docker/netbox/redis-cache
+    media: /opt/docker/netbox/media
+    reports: /opt/docker/netbox/reports
+    scripts: /opt/docker/netbox/scripts
+
+  database:
+    name: netbox
+    user: netbox
+    password: netbox
+    conn_max_age: "300"
+    disable_server_side_cursors: "False"
+
+  redis:
+    password: netbox-redis
+    database: "0"
+    cache_password: netbox-redis-cache
+    cache_database: "1"
+
+  security:
+    secret_key: "change-me-change-me-change-me-change-me-change-me-change-me"
+    api_token_pepper_1: "change-me-api-token-pepper-change-me-api-token-pepper"
+
+  email:
+    server: localhost
+    port: "25"
+    username: netbox
+    password: ""
+    from: netbox@example.invalid
+    use_ssl: "false"
+    use_tls: "false"
+    timeout: "5"
+
+  options:
+    cors_origin_allow_all: "True"
+    graphql_enabled: "true"
+    metrics_enabled: "false"
+    webhooks_enabled: "true"
+    release_check_url: https://api.github.com/repos/netbox-community/netbox/releases
+    skip_superuser: "true"
+
+  superuser:
+    enabled: false
+    name: admin
+    email: admin@example.invalid
+    password: admin
+    api_token: ""
+
+  services:
+    worker: true
+    housekeeping: true
+
+  extra_env: {}
+  volumes: []

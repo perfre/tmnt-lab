@@ -1,0 +1,16 @@
+[Unit]
+Description=NetBox Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_netbox.project_dir }}
+ExecStart={{ docker_netbox.docker_binary }} compose -f {{ docker_netbox.project_dir }}/compose.yml up -d --pull {{ docker_netbox.pull_policy }} --remove-orphans
+ExecStop={{ docker_netbox.docker_binary }} compose -f {{ docker_netbox.project_dir }}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

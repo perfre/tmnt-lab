@@ -1,0 +1,99 @@
+---
+- name: Validate docker_network_device_emulator configuration
+  ansible.builtin.assert:
+    that:
+      - docker_network_device_emulator is mapping
+      - docker_network_device_emulator.devices is mapping
+      - docker_network_device_emulator.devices | length > 0
+    fail_msg: "docker_network_device_emulator must contain a devices dictionary."
+
+- name: Ensure network device emulator directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ docker_network_device_emulator.project_dir }}"
+    - "{{ docker_network_device_emulator.data_dir }}"
+    - "{{ docker_network_device_emulator.project_dir }}/image"
+
+- name: Render SNMPSim image files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_network_device_emulator.project_dir }}/image/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: Dockerfile.j2
+      dest: Dockerfile
+      mode: "0644"
+    - src: entrypoint.sh.j2
+      dest: entrypoint.sh
+      mode: "0755"
+  notify: Restart docker network device emulator compose
+
+- name: Ensure per-device SNMPSim data directories exist
+  ansible.builtin.file:
+    path: "{{ docker_network_device_emulator.data_dir }}/{{ item.key }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ docker_network_device_emulator.devices | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Render SNMPSim device data
+  ansible.builtin.template:
+    src: device.snmprec.j2
+    dest: "{{ docker_network_device_emulator.data_dir }}/{{ item.key }}/{{ item.value.community }}.snmprec"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ docker_network_device_emulator.devices | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart docker network device emulator compose
+
+- name: Render network device emulator Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_network_device_emulator.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker network device emulator compose
+
+- name: Install network device emulator Compose systemd unit
+  ansible.builtin.template:
+    src: docker-network-device-emulator.service.j2
+    dest: /etc/systemd/system/docker-network-device-emulator.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker network device emulator compose
+
+- name: Enable network device emulator Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-network-device-emulator
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update network device emulator Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_network_device_emulator.project_dir }}"
+    project_name: "{{ docker_network_device_emulator.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_network_device_emulator.docker_binary }}"
+    state: present
+    pull: "{{ docker_network_device_emulator.pull_policy }}"
+    build: "{{ docker_network_device_emulator.build }}"
+    recreate: "{{ docker_network_device_emulator.recreate }}"
+    remove_orphans: "{{ docker_network_device_emulator.remove_orphans | bool }}"
+    wait: "{{ docker_network_device_emulator.wait | bool }}"
+    wait_timeout: "{{ docker_network_device_emulator.wait_timeout | default(omit, true) }}"
+  when: docker_network_device_emulator.apply | bool

@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_network_device_emulator
+  author: tmnt-lab
+  description: Run SNMPSim-based mock network devices using Docker Compose.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

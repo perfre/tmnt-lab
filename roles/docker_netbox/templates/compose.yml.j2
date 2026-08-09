@@ -1,0 +1,152 @@
+---
+name: "{{ docker_netbox.project_name }}"
+
+services:
+  netbox:
+    image: "{{ docker_netbox.image }}"
+    container_name: netbox
+    hostname: "{{ docker_netbox.web.hostname }}"
+    restart: "{{ docker_netbox.restart }}"
+    pull_policy: "{{ docker_netbox.pull_policy }}"
+    user: "netbox:root"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    env_file:
+      - ./env/netbox.env
+    environment: &netbox-environment
+      TZ: "{{ docker_netbox.timezone }}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/login/ || exit 1"]
+      start_period: 90s
+      timeout: 3s
+      interval: 15s
+      retries: 5
+    ports:
+      - target: 8080
+        published: {{ docker_netbox.web.http_port }}
+        protocol: tcp
+    volumes: &netbox-volumes
+      - type: bind
+        source: "{{ docker_netbox.data_dirs.media }}"
+        target: /opt/netbox/netbox/media
+      - type: bind
+        source: "{{ docker_netbox.data_dirs.reports }}"
+        target: /opt/netbox/netbox/reports
+      - type: bind
+        source: "{{ docker_netbox.data_dirs.scripts }}"
+        target: /opt/netbox/netbox/scripts
+{% for mount in docker_netbox.volumes %}
+      - type: bind
+        source: "{{ mount.source }}"
+        target: "{{ mount.target }}"
+        read_only: {{ mount.read_only | default(false) | ternary('true', 'false') }}
+{% endfor %}
+
+{% if docker_netbox.services.worker | bool %}
+  netbox-worker:
+    image: "{{ docker_netbox.image }}"
+    container_name: netbox_worker
+    hostname: netbox-worker
+    restart: "{{ docker_netbox.restart }}"
+    pull_policy: "{{ docker_netbox.pull_policy }}"
+    user: "netbox:root"
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    env_file:
+      - ./env/netbox.env
+    environment:
+      <<: *netbox-environment
+    healthcheck:
+      test: ["CMD-SHELL", "ps -aux | grep -v grep | grep -q rqworker || exit 1"]
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
+      retries: 5
+    volumes: *netbox-volumes
+{% endif %}
+
+{% if docker_netbox.services.housekeeping | bool %}
+  netbox-housekeeping:
+    image: "{{ docker_netbox.image }}"
+    container_name: netbox_housekeeping
+    hostname: netbox-housekeeping
+    restart: "{{ docker_netbox.restart }}"
+    pull_policy: "{{ docker_netbox.pull_policy }}"
+    user: "netbox:root"
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - "while true; do /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py housekeeping; sleep 86400; done"
+    env_file:
+      - ./env/netbox.env
+    environment:
+      <<: *netbox-environment
+    volumes: *netbox-volumes
+{% endif %}
+
+  postgres:
+    image: "{{ docker_netbox.postgres_image }}"
+    container_name: netbox_postgres
+    restart: "{{ docker_netbox.restart }}"
+    env_file:
+      - ./env/postgres.env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -q -t 2 -d $$POSTGRES_DB -U $$POSTGRES_USER"]
+      start_period: 20s
+      timeout: 30s
+      interval: 10s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ docker_netbox.data_dirs.postgres }}"
+        target: /var/lib/postgresql
+
+  redis:
+    image: "{{ docker_netbox.valkey_image }}"
+    container_name: netbox_redis
+    restart: "{{ docker_netbox.restart }}"
+    command:
+      - sh
+      - -c
+      - valkey-server --appendonly yes --requirepass $$REDIS_PASSWORD
+    env_file:
+      - ./env/redis.env
+    healthcheck: &redis-healthcheck
+      test: ["CMD-SHELL", "[ $$(valkey-cli --pass \"$${REDIS_PASSWORD}\" ping) = 'PONG' ]"]
+      start_period: 5s
+      timeout: 3s
+      interval: 1s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ docker_netbox.data_dirs.redis }}"
+        target: /data
+
+  redis-cache:
+    image: "{{ docker_netbox.valkey_image }}"
+    container_name: netbox_redis_cache
+    restart: "{{ docker_netbox.restart }}"
+    command:
+      - sh
+      - -c
+      - valkey-server --requirepass $$REDIS_PASSWORD
+    env_file:
+      - ./env/redis-cache.env
+    healthcheck: *redis-healthcheck
+    volumes:
+      - type: bind
+        source: "{{ docker_netbox.data_dirs.redis_cache }}"
+        target: /data

@@ -1,0 +1,10 @@
+FROM {{ docker_snmpv3_testhost.base_image }}
+
+RUN apk add --no-cache net-snmp net-snmp-tools tini
+
+COPY entrypoint.sh /usr/local/bin/snmpv3-testhost-entrypoint
+RUN chmod 0755 /usr/local/bin/snmpv3-testhost-entrypoint
+
+EXPOSE {{ docker_snmpv3_testhost.listen_port }}/udp
+
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/snmpv3-testhost-entrypoint"]

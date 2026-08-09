@@ -1,0 +1,112 @@
+---
+- name: Validate docker_zabbix_testhost configuration
+  ansible.builtin.assert:
+    that:
+      - docker_zabbix_testhost is mapping
+      - docker_zabbix_testhost.containers is mapping
+      - docker_zabbix_testhost.containers | length > 0
+    fail_msg: "docker_zabbix_testhost must contain a containers dictionary."
+
+- name: Ensure Zabbix testhost project directory exists
+  ansible.builtin.file:
+    path: "{{ docker_zabbix_testhost.project_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure per-container mock directories exist
+  ansible.builtin.file:
+    path: "{{ docker_zabbix_testhost.project_dir }}/{{ item.0.key }}/{{ item.1 }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ docker_zabbix_testhost.containers | dict2items | product(['zabbix_agent2.d', 'mock']) | list }}"
+
+- name: Render Zabbix testhost Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_zabbix_testhost.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker zabbix testhost compose
+
+- name: Render mock UserParameter configuration
+  ansible.builtin.template:
+    src: mockup.conf.j2
+    dest: "{{ docker_zabbix_testhost.project_dir }}/{{ item.key }}/zabbix_agent2.d/mockup.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ docker_zabbix_testhost.containers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart docker zabbix testhost compose
+
+- name: Render mock value data
+  ansible.builtin.template:
+    src: values.j2
+    dest: "{{ docker_zabbix_testhost.project_dir }}/{{ item.key }}/mock/values"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ docker_zabbix_testhost.containers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart docker zabbix testhost compose
+
+- name: Render mock value script
+  ansible.builtin.template:
+    src: mock-value.j2
+    dest: "{{ docker_zabbix_testhost.project_dir }}/{{ item.key }}/mock/mock-value"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ docker_zabbix_testhost.containers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart docker zabbix testhost compose
+
+- name: Render mock discovery script
+  ansible.builtin.template:
+    src: mock-discovery.j2
+    dest: "{{ docker_zabbix_testhost.project_dir }}/{{ item.key }}/mock/mock-discovery"
+    owner: root
+    group: root
+    mode: "0755"
+  loop: "{{ docker_zabbix_testhost.containers | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  notify: Restart docker zabbix testhost compose
+
+- name: Install Zabbix testhost Compose systemd unit
+  ansible.builtin.template:
+    src: docker-zabbix-testhosts.service.j2
+    dest: /etc/systemd/system/docker-zabbix-testhosts.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker zabbix testhost compose
+
+- name: Enable Zabbix testhost Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-zabbix-testhosts
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update Zabbix testhost Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_zabbix_testhost.project_dir }}"
+    project_name: "{{ docker_zabbix_testhost.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_zabbix_testhost.docker_binary }}"
+    state: present
+    pull: "{{ docker_zabbix_testhost.pull_policy }}"
+    recreate: "{{ docker_zabbix_testhost.recreate }}"
+    remove_orphans: "{{ docker_zabbix_testhost.remove_orphans | bool }}"
+    wait: "{{ docker_zabbix_testhost.wait | bool }}"
+    wait_timeout: "{{ docker_zabbix_testhost.wait_timeout | default(omit, true) }}"
+  when: docker_zabbix_testhost.apply | bool

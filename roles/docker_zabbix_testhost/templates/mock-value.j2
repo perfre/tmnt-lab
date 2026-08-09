@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+key="${1:-}"
+values_file="/var/lib/zabbix/mock/values"
+
+if [ -n "$key" ] && [ -f "$values_file" ]; then
+  value="$(awk -F= -v k="$key" '$1 == k {sub(/^[^=]*=/, ""); print; found=1} END {exit !found}' "$values_file" 2>/dev/null)" && {
+    printf '%s\n' "$value"
+    exit 0
+  }
+fi
+
+case "$key" in
+{% set ranges = docker_zabbix_testhost.random_ranges | combine(item.value.random_ranges | default({}), recursive=True) %}
+{% for key, range in ranges.items() %}
+  {{ key }})
+    awk 'BEGIN { srand(); printf "{{ range.format | default("%.2f") }}\n", {{ range.min }} + rand() * ({{ range.max }} - {{ range.min }}) }'
+    ;;
+{% endfor %}
+  *)
+    printf '0\n'
+    ;;
+esac

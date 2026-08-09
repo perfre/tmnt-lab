@@ -1,0 +1,6 @@
+---
+- name: Restart docker openbao compose
+  ansible.builtin.systemd:
+    name: docker-openbao
+    state: restarted
+    daemon_reload: true

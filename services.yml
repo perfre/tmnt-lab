@@ -1,0 +1,57 @@
+# Deployment pipeline
+
+#- hosts: docker
+#  become: true
+#  gather_facts: true
+#  roles:
+#    - role: service_docker
+#      tags: [service_docker]
+
+- hosts: openbao
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_openbao
+      tags: [docker_openbao]
+
+- hosts: zabbix
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_zabbix
+      tags: [docker_zabbix]
+
+- hosts: librenms
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_librenms
+      tags: [docker_librenms]
+
+- hosts: netbox
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_netbox
+      tags: [docker_netbox]
+
+- hosts: zabbix_testhost
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_zabbix_testhost
+      tags: [docker_zabbix_testhost]
+
+- hosts: snmpv3_testhost
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_snmpv3_testhost
+      tags: [docker_snmpv3_testhost]
+
+- hosts: network_device_emulator
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_network_device_emulator
+      tags: [docker_network_device_emulator]

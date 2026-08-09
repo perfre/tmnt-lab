@@ -1,0 +1,7 @@
+#!/bin/sh
+set -eu
+
+mkdir -p /var/lib/net-snmp /run
+cp /config/persistent-snmpd.conf /var/lib/net-snmp/snmpd.conf
+chmod 0600 /var/lib/net-snmp/snmpd.conf
+exec snmpd -f -Lo -C -c /config/snmpd.conf -p /run/snmpd.pid

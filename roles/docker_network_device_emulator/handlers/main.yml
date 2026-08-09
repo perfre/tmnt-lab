@@ -1,0 +1,6 @@
+---
+- name: Restart docker network device emulator compose
+  ansible.builtin.systemd:
+    name: docker-network-device-emulator
+    state: restarted
+    daemon_reload: true

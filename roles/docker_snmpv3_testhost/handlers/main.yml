@@ -1,0 +1,6 @@
+---
+- name: Restart docker snmpv3 testhost compose
+  ansible.builtin.systemd:
+    name: docker-snmpv3-testhosts
+    state: restarted
+    daemon_reload: true

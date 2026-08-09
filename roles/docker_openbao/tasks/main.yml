@@ -1,0 +1,68 @@
+---
+- name: Validate docker_openbao configuration
+  ansible.builtin.assert:
+    that:
+      - docker_openbao is mapping
+      - docker_openbao.project_dir | length > 0
+      - docker_openbao.image | length > 0
+    fail_msg: "docker_openbao must be a dictionary with project_dir and image set."
+
+- name: Ensure OpenBao project directories exist
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ docker_openbao.project_dir }}"
+    - "{{ docker_openbao.config_dir }}"
+    - "{{ docker_openbao.data_dir }}"
+
+- name: Render OpenBao configuration
+  ansible.builtin.template:
+    src: openbao.hcl.j2
+    dest: "{{ docker_openbao.config_dir }}/openbao.hcl"
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart docker openbao compose
+
+- name: Render OpenBao Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_openbao.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker openbao compose
+
+- name: Install OpenBao Compose systemd unit
+  ansible.builtin.template:
+    src: docker-openbao.service.j2
+    dest: /etc/systemd/system/docker-openbao.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker openbao compose
+
+- name: Enable OpenBao Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-openbao
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update OpenBao Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_openbao.project_dir }}"
+    project_name: "{{ docker_openbao.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_openbao.docker_binary }}"
+    state: present
+    pull: "{{ docker_openbao.pull_policy }}"
+    recreate: "{{ docker_openbao.recreate }}"
+    remove_orphans: "{{ docker_openbao.remove_orphans | bool }}"
+    wait: "{{ docker_openbao.wait | bool }}"
+    wait_timeout: "{{ docker_openbao.wait_timeout | default(omit, true) }}"
+  when: docker_openbao.apply | bool

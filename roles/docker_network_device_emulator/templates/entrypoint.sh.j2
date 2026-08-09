@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+exec snmpsim-command-responder \
+  --data-dir=/usr/local/snmpsim/data \
+  --agent-udpv4-endpoint=0.0.0.0:161 \
+  --logging-method=stdout \
+  ${EXTRA_FLAGS:-}
