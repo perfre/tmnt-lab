@@ -1,0 +1,29 @@
+---
+docker_mariadb:
+  project_name: mariadb
+  project_dir: /opt/docker/mariadb
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 120
+  restart: unless-stopped
+
+  # This initial shared database deployment is intentionally localhost-lab only.
+  lab_mode: true
+  bind_address: 127.0.0.1
+  image: docker.io/library/mariadb:11.8
+  data_dir: /opt/docker/mariadb/data
+  listen_port: 3306
+  network:
+    name: tmnt_mariadb
+    alias: mariadb
+  admin_password: LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE
+  timezone: Europe/Stockholm
+
+  resources:
+    memory_limit: 1g
+    cpus: "1.0"
+    pids_limit: 256

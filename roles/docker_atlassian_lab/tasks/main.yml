@@ -1,0 +1,229 @@
+---
+- name: Validate docker_atlassian_lab configuration and localhost boundary
+  ansible.builtin.assert:
+    that:
+      - docker_atlassian_lab is mapping
+      - docker_atlassian_lab.lab_mode | bool
+      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - docker_atlassian_lab.bind_address in ['127.0.0.1', '::1']
+      - docker_atlassian_lab.jira.https_port | int >= 1024
+      - docker_atlassian_lab.jira.https_port | int <= 65535
+      - docker_atlassian_lab.confluence.https_port | int >= 1024
+      - docker_atlassian_lab.confluence.https_port | int <= 65535
+      - docker_atlassian_lab.jira.https_port | int != docker_atlassian_lab.confluence.https_port | int
+      - docker_atlassian_lab.database.jira.password == 'LAB_ONLY_JIRA_DB_PASSWORD_DO_NOT_REUSE'
+      - docker_atlassian_lab.database.confluence.password == 'LAB_ONLY_CONFLUENCE_DB_PASSWORD_DO_NOT_REUSE'
+      - docker_atlassian_lab.database.jira.host | length > 0
+      - docker_atlassian_lab.database.confluence.host | length > 0
+      - docker_atlassian_lab.database.jira.port | int > 0
+      - docker_atlassian_lab.database.confluence.port | int > 0
+      - docker_atlassian_lab.database.network.external | bool
+      - docker_atlassian_lab.database.network.name | length > 0
+      - docker_atlassian_lab.jira.image is not search(':latest$')
+      - docker_atlassian_lab.confluence.image is not search(':latest$')
+      - docker_atlassian_lab.proxy.image is not search(':latest$')
+      - docker_atlassian_lab.pki.leaf_validity_days | int <= 397
+      - docker_atlassian_lab.pki.renew_before_days | int > 0
+      - docker_atlassian_lab.pki.renew_before_days | int < docker_atlassian_lab.pki.leaf_validity_days | int
+    fail_msg: >-
+      docker_atlassian_lab is a disposable localhost-only role. It requires lab_mode=true,
+      a loopback ansible_host and bind address, pinned images, a declared external PostgreSQL
+      network, the built-in synthetic database passwords, distinct unprivileged HTTPS ports,
+      and a leaf certificate valid for at most 397 days.
+
+- name: Ensure Atlassian lab project and data directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_atlassian_lab.project_dir }}"
+      owner: root
+      group: root
+      mode: "0755"
+    - path: "{{ docker_atlassian_lab.jira.data_dir }}"
+      owner: "2001"
+      group: "2001"
+      mode: "0750"
+    - path: "{{ docker_atlassian_lab.confluence.data_dir }}"
+      owner: "2002"
+      group: "2002"
+      mode: "0750"
+    - path: "{{ docker_atlassian_lab.pki.dir }}"
+      owner: root
+      group: "101"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Generate disposable lab CA private key
+  community.crypto.openssl_privatekey:
+    path: "{{ docker_atlassian_lab.pki.dir }}/ca.key"
+    type: ECC
+    curve: secp384r1
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart docker atlassian lab compose
+
+- name: Generate disposable lab CA certificate request
+  community.crypto.openssl_csr:
+    path: "{{ docker_atlassian_lab.pki.dir }}/ca.csr"
+    privatekey_path: "{{ docker_atlassian_lab.pki.dir }}/ca.key"
+    common_name: "{{ docker_atlassian_lab.pki.ca_common_name }}"
+    basic_constraints:
+      - CA:TRUE
+    basic_constraints_critical: true
+    key_usage:
+      - keyCertSign
+      - cRLSign
+    key_usage_critical: true
+    use_common_name_for_san: false
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart docker atlassian lab compose
+
+- name: Issue disposable self-signed lab CA certificate
+  community.crypto.x509_certificate:
+    path: "{{ docker_atlassian_lab.pki.dir }}/ca.crt"
+    privatekey_path: "{{ docker_atlassian_lab.pki.dir }}/ca.key"
+    csr_path: "{{ docker_atlassian_lab.pki.dir }}/ca.csr"
+    provider: selfsigned
+    selfsigned_not_after: +3650d
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: Restart docker atlassian lab compose
+
+- name: Generate Atlassian lab TLS private key
+  community.crypto.openssl_privatekey:
+    path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.key"
+    type: ECC
+    curve: secp384r1
+    owner: root
+    group: "101"
+    mode: "0640"
+  no_log: true
+  notify: Restart docker atlassian lab compose
+
+- name: Generate Atlassian lab TLS certificate request
+  community.crypto.openssl_csr:
+    path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.csr"
+    privatekey_path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.key"
+    common_name: "{{ docker_atlassian_lab.pki.leaf_common_name }}"
+    subject_alt_name: "{{ docker_atlassian_lab.pki.subject_alt_names }}"
+    use_common_name_for_san: false
+    basic_constraints:
+      - CA:FALSE
+    basic_constraints_critical: true
+    key_usage:
+      - digitalSignature
+      - keyAgreement
+    key_usage_critical: true
+    extended_key_usage:
+      - serverAuth
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: Restart docker atlassian lab compose
+
+- name: Check for an existing Atlassian lab TLS certificate
+  ansible.builtin.stat:
+    path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.crt"
+  register: atlassian_lab_leaf_certificate
+
+- name: Inspect Atlassian lab TLS certificate renewal window
+  community.crypto.x509_certificate_info:
+    path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.crt"
+    valid_at:
+      renewal_window: "+{{ docker_atlassian_lab.pki.renew_before_days }}d"
+  register: atlassian_lab_leaf_certificate_info
+  when: atlassian_lab_leaf_certificate.stat.exists
+
+- name: Issue or renew Atlassian lab TLS certificate
+  community.crypto.x509_certificate:
+    path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.crt"
+    csr_path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.csr"
+    ownca_path: "{{ docker_atlassian_lab.pki.dir }}/ca.crt"
+    ownca_privatekey_path: "{{ docker_atlassian_lab.pki.dir }}/ca.key"
+    provider: ownca
+    ownca_not_after: "+{{ docker_atlassian_lab.pki.leaf_validity_days }}d"
+    force: >-
+      {{
+        (not atlassian_lab_leaf_certificate.stat.exists)
+        or (not (atlassian_lab_leaf_certificate_info.valid_at.renewal_window | default(false)))
+      }}
+    owner: root
+    group: root
+    mode: "0644"
+  no_log: true
+  notify: Restart docker atlassian lab compose
+
+- name: Render synthetic Atlassian lab environment
+  ansible.builtin.template:
+    src: lab.env.j2
+    dest: "{{ docker_atlassian_lab.project_dir }}/lab.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart docker atlassian lab compose
+
+- name: Render Atlassian lab TLS proxy configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: "{{ docker_atlassian_lab.project_dir }}/nginx.conf"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker atlassian lab compose
+
+- name: Render Atlassian lab Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_atlassian_lab.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker atlassian lab compose
+
+- name: Install Atlassian lab Compose systemd unit
+  ansible.builtin.template:
+    src: docker-atlassian-lab.service.j2
+    dest: /etc/systemd/system/docker-atlassian-lab.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker atlassian lab compose
+
+- name: Enable Atlassian lab Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-atlassian-lab
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update Atlassian lab Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_atlassian_lab.project_dir }}"
+    project_name: "{{ docker_atlassian_lab.project_name }}"
+    files:
+      - compose.yml
+    env_files:
+      - lab.env
+    docker_cli: "{{ docker_atlassian_lab.docker_binary }}"
+    state: present
+    pull: "{{ docker_atlassian_lab.pull_policy }}"
+    recreate: "{{ docker_atlassian_lab.recreate }}"
+    remove_orphans: "{{ docker_atlassian_lab.remove_orphans | bool }}"
+    wait: "{{ docker_atlassian_lab.wait | bool }}"
+    wait_timeout: "{{ docker_atlassian_lab.wait_timeout }}"
+  no_log: true
+  when: docker_atlassian_lab.apply | bool

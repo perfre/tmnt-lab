@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: ops_ollama_models
+  author: tmnt-lab
+  description: Reconcile and optionally warm an inventory-defined set of local Ollama models.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

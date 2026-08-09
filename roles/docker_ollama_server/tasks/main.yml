@@ -1,0 +1,98 @@
+---
+- name: Validate docker_ollama_server configuration
+  ansible.builtin.assert:
+    that:
+      - docker_ollama_server is mapping
+      - docker_ollama_server.project_dir is match('^/\\S+$')
+      - docker_ollama_server.data_dir is match('^/\\S+$')
+      - docker_ollama_server.container_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_ollama_server.image is not search(':latest$')
+      - docker_ollama_server.image is search('@sha256:[0-9a-f]{64}$')
+      - docker_ollama_server.api.port | int >= 1024
+      - docker_ollama_server.api.port | int <= 65535
+      - docker_ollama_server.runtime_user.uid | int > 0
+      - docker_ollama_server.runtime_user.gid | int > 0
+      - docker_ollama_server.server.max_loaded_models | int >= 2
+      - docker_ollama_server.server.num_parallel | int >= 1
+      - docker_ollama_server.server.context_length | int >= 2048
+      - docker_ollama_server.server.kv_cache_type in ['f16', 'q8_0', 'q4_0']
+      - docker_ollama_server.gpu.devices | length > 0
+      - docker_ollama_server.gpu.devices | select('match', '^nvidia\\.com/gpu=') | list | length == docker_ollama_server.gpu.devices | length
+      - not docker_ollama_server.ingress.enabled | bool or docker_ollama_server.ingress.external | bool
+      - not docker_ollama_server.ingress.enabled | bool or docker_ollama_server.ingress.network_name | length > 0
+      - docker_ollama_server.lab_mode | bool or not docker_ollama_server.api.publish | bool
+      - not docker_ollama_server.lab_mode | bool or (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - not docker_ollama_server.lab_mode | bool or docker_ollama_server.api.bind_address in ['127.0.0.1', '::1']
+    fail_msg: >-
+      docker_ollama_server requires a digest-pinned image, non-root UID/GID, NVIDIA CDI devices,
+      bounded concurrency, and safe networking. Lab publishing is loopback-only; non-lab
+      deployments must remain unpublished behind an authenticated TLS ingress.
+
+- name: Check for the requested NVIDIA CDI specification
+  ansible.builtin.stat:
+    path: /var/run/cdi/nvidia.yaml
+  register: docker_ollama_server_nvidia_cdi
+  when: docker_ollama_server.gpu.enabled | bool
+
+- name: Require NVIDIA CDI configuration before deploying Ollama
+  ansible.builtin.assert:
+    that:
+      - docker_ollama_server_nvidia_cdi.stat.exists
+    fail_msg: "Run service_docker with GPU support enabled before docker_ollama_server."
+  when: docker_ollama_server.gpu.enabled | bool
+
+- name: Ensure Ollama project and model directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_ollama_server.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_ollama_server.data_dir }}"
+      owner: "{{ docker_ollama_server.runtime_user.uid }}"
+      group: "{{ docker_ollama_server.runtime_user.gid }}"
+      mode: "0750"
+
+- name: Render Ollama Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_ollama_server.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker ollama server compose
+
+- name: Install Ollama Compose systemd unit
+  ansible.builtin.template:
+    src: docker-ollama-server.service.j2
+    dest: /etc/systemd/system/docker-ollama-server.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker ollama server compose
+
+- name: Enable Ollama Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-ollama-server
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update Ollama Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_ollama_server.project_dir }}"
+    project_name: "{{ docker_ollama_server.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_ollama_server.docker_binary }}"
+    state: present
+    pull: "{{ docker_ollama_server.pull_policy }}"
+    recreate: "{{ docker_ollama_server.recreate }}"
+    remove_orphans: "{{ docker_ollama_server.remove_orphans | bool }}"
+    wait: "{{ docker_ollama_server.wait | bool }}"
+    wait_timeout: "{{ docker_ollama_server.wait_timeout }}"
+  when: docker_ollama_server.apply | bool

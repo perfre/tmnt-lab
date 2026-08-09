@@ -4,8 +4,13 @@
     that:
       - docker_librenms is mapping
       - docker_librenms.project_dir | length > 0
+      - docker_librenms.database.host | length > 0
+      - docker_librenms.database.port | int > 0
+      - docker_librenms.database.port | int <= 65535
       - docker_librenms.database.password | length > 0
-    fail_msg: "docker_librenms must be a dictionary with project_dir and database.password set."
+      - docker_librenms.database.network.external | bool
+      - docker_librenms.database.network.name | length > 0
+    fail_msg: "docker_librenms requires a project directory and a complete external MariaDB connection."
 
 - name: Ensure LibreNMS project directories exist
   ansible.builtin.file:
@@ -17,7 +22,6 @@
   loop:
     - "{{ docker_librenms.project_dir }}"
     - "{{ docker_librenms.data_dir }}"
-    - "{{ docker_librenms.db_dir }}"
 
 - name: Render LibreNMS environment files
   ansible.builtin.template:
@@ -25,14 +29,14 @@
     dest: "{{ docker_librenms.project_dir }}/{{ item.dest }}"
     owner: root
     group: root
-    mode: "0640"
+    mode: "0600"
   loop:
-    - src: env.j2
-      dest: .env
     - src: librenms.env.j2
       dest: librenms.env
     - src: msmtpd.env.j2
       dest: msmtpd.env
+  no_log: true
+  diff: false
   notify: Restart docker librenms compose
 
 - name: Render LibreNMS Docker Compose file
@@ -41,7 +45,9 @@
     dest: "{{ docker_librenms.project_dir }}/compose.yml"
     owner: root
     group: root
-    mode: "0644"
+    mode: "0600"
+  no_log: true
+  diff: false
   notify: Restart docker librenms compose
 
 - name: Install LibreNMS Compose systemd unit

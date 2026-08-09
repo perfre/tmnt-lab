@@ -1,0 +1,9 @@
+---
+- name: Restart docker atlassian lab compose
+  ansible.builtin.systemd:
+    name: docker-atlassian-lab
+    state: restarted
+    daemon_reload: true
+  no_log: true
+  when: docker_atlassian_lab.apply | bool
+

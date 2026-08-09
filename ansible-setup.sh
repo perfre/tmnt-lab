@@ -60,6 +60,7 @@ echo "--- 2. Creating Ansible Virtual Environment ---"
 python3 -m venv ${SHARED_ANSIBLE_DIR}
 source ${SHARED_ANSIBLE_DIR}/bin/activate
 ${SHARED_ANSIBLE_DIR}/bin/pip install -r ansible-requirements.txt
+${SHARED_ANSIBLE_DIR}/bin/ansible-galaxy collection install -r ansible-galaxy-requirements.yml
 deactivate
 
 echo "--- 3. Setting up Permissions ---"
@@ -118,4 +119,3 @@ echo ""
 echo "✅ Setup complete!"
 echo "IMPORTANT: In order to use 'deploy' alias you need to enter password in ansible-local-lab.yml file or run with -K. If not using ssh-keys you need to supply -k"
 echo "IMPORTANT: The all logged in users must log out and log back in for group changes to take effect."
-

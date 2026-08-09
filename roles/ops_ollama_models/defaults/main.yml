@@ -1,0 +1,33 @@
+---
+ops_ollama_models:
+  apply: true
+  lab_mode: false
+  container_name: ollama_server
+  update_present_models: false
+  operation_timeout: 3600
+
+  # Free/open-weight lab defaults sized for a 12 GiB NVIDIA GPU.
+  models:
+    - name: qwen3:8b
+      type: llm
+      state: present
+      warm: true
+      license: Apache-2.0
+      source_url: https://ollama.com/library/qwen3:8b
+    - name: bge-m3:latest
+      type: embedding
+      state: present
+      warm: true
+      license: MIT
+      source_url: https://ollama.com/library/bge-m3
+
+  warm_api:
+    enabled: false
+    scheme: https
+    host: ""
+    port: 443
+    validate_certs: true
+    ca_path: ""
+    headers: {}
+    keep_alive: -1
+    timeout: 900

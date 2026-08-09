@@ -1,0 +1,84 @@
+---
+- name: Validate docker_mariadb localhost lab configuration
+  ansible.builtin.assert:
+    that:
+      - docker_mariadb is mapping
+      - docker_mariadb.lab_mode | bool
+      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - docker_mariadb.bind_address in ['127.0.0.1', '::1']
+      - docker_mariadb.listen_port | int >= 1024
+      - docker_mariadb.listen_port | int <= 65535
+      - docker_mariadb.image is not search(':latest$')
+      - docker_mariadb.network.name | length > 0
+      - docker_mariadb.network.alias | length > 0
+      - docker_mariadb.admin_password == 'LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE'
+    fail_msg: >-
+      docker_mariadb currently supports disposable localhost lab deployments only.
+      Keep lab_mode enabled, target loopback, use the synthetic admin password, and pin the image.
+
+- name: Ensure MariaDB project and data directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_mariadb.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_mariadb.data_dir }}"
+      owner: "999"
+      group: "999"
+      mode: "0700"
+
+- name: Render synthetic MariaDB administrator secret
+  ansible.builtin.copy:
+    content: "{{ docker_mariadb.admin_password }}\n"
+    dest: "{{ docker_mariadb.project_dir }}/root-password"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart docker mariadb compose
+
+- name: Render MariaDB Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_mariadb.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker mariadb compose
+
+- name: Install MariaDB Compose systemd unit
+  ansible.builtin.template:
+    src: docker-mariadb.service.j2
+    dest: /etc/systemd/system/docker-mariadb.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker mariadb compose
+
+- name: Enable MariaDB Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-mariadb
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update MariaDB Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_mariadb.project_dir }}"
+    project_name: "{{ docker_mariadb.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_mariadb.docker_binary }}"
+    state: present
+    pull: "{{ docker_mariadb.pull_policy }}"
+    recreate: "{{ docker_mariadb.recreate }}"
+    remove_orphans: "{{ docker_mariadb.remove_orphans | bool }}"
+    wait: "{{ docker_mariadb.wait | bool }}"
+    wait_timeout: "{{ docker_mariadb.wait_timeout }}"
+  when: docker_mariadb.apply | bool

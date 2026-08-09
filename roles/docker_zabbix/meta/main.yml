@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: docker_zabbix
   author: tmnt-lab
-  description: Run Zabbix 7.4 with PostgreSQL using Docker Compose.
+  description: Run Zabbix 7.4 using Docker Compose and an external PostgreSQL service.
   license: MIT
   min_ansible_version: "2.15"
 dependencies: []

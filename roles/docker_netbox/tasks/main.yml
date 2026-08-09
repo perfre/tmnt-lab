@@ -4,7 +4,12 @@
     that:
       - docker_netbox is mapping
       - docker_netbox.project_dir | length > 0
+      - docker_netbox.database.host | length > 0
+      - docker_netbox.database.port | int > 0
+      - docker_netbox.database.port | int <= 65535
       - docker_netbox.database.password | length > 0
+      - docker_netbox.database.network.external | bool
+      - docker_netbox.database.network.name | length > 0
       - docker_netbox.redis.password | length > 0
       - docker_netbox.redis.cache_password | length > 0
       - docker_netbox.security.secret_key | length >= 50
@@ -20,7 +25,6 @@
   loop:
     - "{{ docker_netbox.project_dir }}"
     - "{{ docker_netbox.project_dir }}/env"
-    - "{{ docker_netbox.data_dirs.postgres }}"
     - "{{ docker_netbox.data_dirs.redis }}"
     - "{{ docker_netbox.data_dirs.redis_cache }}"
     - "{{ docker_netbox.data_dirs.media }}"
@@ -33,16 +37,16 @@
     dest: "{{ docker_netbox.project_dir }}/env/{{ item.dest }}"
     owner: root
     group: root
-    mode: "0640"
+    mode: "0600"
   loop:
     - src: netbox.env.j2
       dest: netbox.env
-    - src: postgres.env.j2
-      dest: postgres.env
     - src: redis.env.j2
       dest: redis.env
     - src: redis-cache.env.j2
       dest: redis-cache.env
+  no_log: true
+  diff: false
   notify: Restart docker netbox compose
 
 - name: Render NetBox Docker Compose file

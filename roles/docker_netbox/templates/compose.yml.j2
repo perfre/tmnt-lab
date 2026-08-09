@@ -1,6 +1,11 @@
 ---
 name: "{{ docker_netbox.project_name }}"
 
+networks:
+  database:
+    external: {{ docker_netbox.database.network.external | ternary('true', 'false') }}
+    name: "{{ docker_netbox.database.network.name }}"
+
 services:
   netbox:
     image: "{{ docker_netbox.image }}"
@@ -10,8 +15,6 @@ services:
     pull_policy: "{{ docker_netbox.pull_policy }}"
     user: "netbox:root"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       redis-cache:
@@ -46,6 +49,9 @@ services:
         target: "{{ mount.target }}"
         read_only: {{ mount.read_only | default(false) | ternary('true', 'false') }}
 {% endfor %}
+    networks: &netbox-networks
+      - default
+      - database
 
 {% if docker_netbox.services.worker | bool %}
   netbox-worker:
@@ -73,6 +79,7 @@ services:
       interval: 15s
       retries: 5
     volumes: *netbox-volumes
+    networks: *netbox-networks
 {% endif %}
 
 {% if docker_netbox.services.housekeeping | bool %}
@@ -95,24 +102,8 @@ services:
     environment:
       <<: *netbox-environment
     volumes: *netbox-volumes
+    networks: *netbox-networks
 {% endif %}
-
-  postgres:
-    image: "{{ docker_netbox.postgres_image }}"
-    container_name: netbox_postgres
-    restart: "{{ docker_netbox.restart }}"
-    env_file:
-      - ./env/postgres.env
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -q -t 2 -d $$POSTGRES_DB -U $$POSTGRES_USER"]
-      start_period: 20s
-      timeout: 30s
-      interval: 10s
-      retries: 5
-    volumes:
-      - type: bind
-        source: "{{ docker_netbox.data_dirs.postgres }}"
-        target: /var/lib/postgresql
 
   redis:
     image: "{{ docker_netbox.valkey_image }}"

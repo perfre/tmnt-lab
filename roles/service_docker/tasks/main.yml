@@ -5,6 +5,18 @@
       - ansible_facts.os_family in ['Debian', 'RedHat']
     fail_msg: "service_docker supports Debian/Ubuntu and RedHat-family hosts."
 
+- name: Validate Docker GPU configuration
+  ansible.builtin.assert:
+    that:
+      - service_docker.gpu.vendor == 'nvidia'
+      - service_docker.gpu.mode == 'cdi'
+      - service_docker.gpu.device is match('^nvidia\\.com/gpu=(all|[A-Za-z0-9_.:-]+)$')
+      - service_docker.gpu.nvidia.packages | length > 0
+    fail_msg: >-
+      GPU support currently implements NVIDIA through CDI only. Select vendor=nvidia,
+      mode=cdi, a valid nvidia.com/gpu device, and at least one toolkit package.
+  when: service_docker.gpu.enabled | bool
+
 - name: Install Docker repository and packages on Debian family
   ansible.builtin.include_tasks: debian.yml
   when: ansible_facts.os_family == 'Debian'
@@ -12,6 +24,10 @@
 - name: Install Docker repository and packages on RedHat family
   ansible.builtin.include_tasks: redhat.yml
   when: ansible_facts.os_family == 'RedHat'
+
+- name: Configure optional NVIDIA CDI support
+  ansible.builtin.include_tasks: gpu_nvidia.yml
+  when: service_docker.gpu.enabled | bool
 
 - name: Ensure Docker configuration directory exists
   ansible.builtin.file:

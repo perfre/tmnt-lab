@@ -15,18 +15,20 @@ docker_librenms:
   pgid: "1000"
 
   image: librenms/librenms:latest
-  mariadb_image: mariadb:10
   redis_image: redis:7.2-alpine
   msmtpd_image: crazymax/msmtpd:latest
 
   data_dir: /opt/docker/librenms/librenms
-  db_dir: /opt/docker/librenms/db
 
   database:
+    host: mariadb
+    port: "3306"
     name: librenms
     user: librenms
-    password: librenms
-    root_password_random: true
+    password: ""
+    network:
+      name: tmnt_mariadb
+      external: true
 
   web:
     hostname: librenms

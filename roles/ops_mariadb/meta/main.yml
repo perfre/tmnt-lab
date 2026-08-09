@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: ops_mariadb
+  author: tmnt-lab
+  description: Reconcile MariaDB databases, application users, and least-privilege grants from inventory.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

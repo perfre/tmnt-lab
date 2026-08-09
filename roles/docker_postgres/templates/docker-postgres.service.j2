@@ -1,0 +1,16 @@
+[Unit]
+Description=PostgreSQL Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_postgres.project_dir }}
+ExecStart={{ docker_postgres.docker_binary }} compose -f {{ docker_postgres.project_dir }}/compose.yml up -d --pull {{ docker_postgres.pull_policy }} --remove-orphans
+ExecStop={{ docker_postgres.docker_binary }} compose -f {{ docker_postgres.project_dir }}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

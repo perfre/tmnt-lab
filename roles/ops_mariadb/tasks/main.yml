@@ -1,0 +1,96 @@
+---
+- name: Validate ops_mariadb localhost lab boundary
+  ansible.builtin.assert:
+    that:
+      - ops_mariadb is mapping
+      - ops_mariadb.lab_mode | bool
+      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - ops_mariadb.login_host in ['localhost', '127.0.0.1', '::1']
+      - ops_mariadb.login_port | int >= 1024
+      - ops_mariadb.login_port | int <= 65535
+      - ops_mariadb.login_user == 'root'
+      - ops_mariadb.login_password == 'LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE'
+      - ops_mariadb.databases is sequence
+      - ops_mariadb.users is sequence
+      - ansible_os_family in ops_mariadb.driver_packages
+      - (ops_mariadb.databases | map(attribute='name') | list | unique | length) == (ops_mariadb.databases | length)
+      - (ops_mariadb.users | map(attribute='name') | list | unique | length) == (ops_mariadb.users | length)
+    fail_msg: >-
+      ops_mariadb is a localhost-lab bootstrap role. Database and user names must be unique,
+      the connection must stay on loopback, and the synthetic administrator credential must match docker_mariadb.
+
+- name: Validate MariaDB database definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is string
+      - item.name is match('^[A-Za-z0-9_]+$')
+      - item.state | default('present') in ['present', 'absent']
+    fail_msg: "Every ops_mariadb database needs a safe unique name and a supported state."
+  loop: "{{ ops_mariadb.databases }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+
+- name: Validate MariaDB user definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is string
+      - item.name is match('^[A-Za-z0-9_]+$')
+      - item.host | default('%') in ['%','localhost','127.0.0.1','::1']
+      - item.password is defined
+      - item.password is match('^LAB_ONLY_[A-Z0-9_]+_DO_NOT_REUSE$')
+      - item.privileges is mapping
+      - item.state | default('present') in ['present', 'absent']
+    fail_msg: >-
+      Every ops_mariadb user needs a safe name, explicit privilege mapping, supported host/state,
+      and a conspicuously synthetic LAB_ONLY_*_DO_NOT_REUSE password.
+  loop: "{{ ops_mariadb.users }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+  no_log: true
+
+- name: Install MariaDB Python driver
+  ansible.builtin.package:
+    name: "{{ ops_mariadb.driver_packages[ansible_os_family] }}"
+    state: present
+
+- name: Wait for the loopback MariaDB administrative endpoint
+  ansible.builtin.wait_for:
+    host: "{{ ops_mariadb.login_host }}"
+    port: "{{ ops_mariadb.login_port }}"
+    timeout: 120
+
+- name: Reconcile MariaDB databases from inventory
+  ansible.mysql.mysql_db:
+    name: "{{ item.name }}"
+    state: "{{ item.state | default('present') }}"
+    encoding: "{{ item.encoding | default('utf8mb4') }}"
+    collation: "{{ item.collation | default('utf8mb4_unicode_ci') }}"
+    login_host: "{{ ops_mariadb.login_host }}"
+    login_port: "{{ ops_mariadb.login_port }}"
+    login_user: "{{ ops_mariadb.login_user }}"
+    login_password: "{{ ops_mariadb.login_password }}"
+    config_file: ""
+  loop: "{{ ops_mariadb.databases }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  diff: false
+
+- name: Reconcile MariaDB users and grants from inventory
+  ansible.mysql.mysql_user:
+    name: "{{ item.name }}"
+    host: "{{ item.host | default('%') }}"
+    password: "{{ item.password }}"
+    priv: "{{ item.privileges }}"
+    append_privs: false
+    state: "{{ item.state | default('present') }}"
+    login_host: "{{ ops_mariadb.login_host }}"
+    login_port: "{{ ops_mariadb.login_port }}"
+    login_user: "{{ ops_mariadb.login_user }}"
+    login_password: "{{ ops_mariadb.login_password }}"
+    config_file: ""
+  loop: "{{ ops_mariadb.users }}"
+  loop_control:
+    label: "{{ item.name }}@{{ item.host | default('%') }}"
+  no_log: true
+  diff: false

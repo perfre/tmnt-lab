@@ -1,0 +1,18 @@
+[Unit]
+Description=Disposable Jira and Confluence Docker Compose lab
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_atlassian_lab.project_dir }}
+EnvironmentFile={{ docker_atlassian_lab.project_dir }}/lab.env
+ExecStart={{ docker_atlassian_lab.docker_binary }} compose -f {{ docker_atlassian_lab.project_dir }}/compose.yml up -d --pull {{ docker_atlassian_lab.pull_policy }} --remove-orphans
+ExecStop={{ docker_atlassian_lab.docker_binary }} compose -f {{ docker_atlassian_lab.project_dir }}/compose.yml down
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target
+

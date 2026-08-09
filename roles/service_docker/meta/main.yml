@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: service_docker
   author: tmnt-lab
-  description: Install Docker CE from the official Docker repositories.
+  description: Install Docker CE and optional NVIDIA CDI support from official repositories.
   license: MIT
   min_ansible_version: "2.15"
   platforms:

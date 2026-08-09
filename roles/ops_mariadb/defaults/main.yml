@@ -1,0 +1,14 @@
+---
+ops_mariadb:
+  lab_mode: true
+  login_host: 127.0.0.1
+  login_port: 3306
+  login_user: root
+  login_password: LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE
+  driver_packages:
+    Debian:
+      - python3-pymysql
+    RedHat:
+      - python3-PyMySQL
+  databases: []
+  users: []

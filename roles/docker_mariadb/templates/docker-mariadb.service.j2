@@ -1,0 +1,16 @@
+[Unit]
+Description=MariaDB Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_mariadb.project_dir }}
+ExecStart={{ docker_mariadb.docker_binary }} compose -f {{ docker_mariadb.project_dir }}/compose.yml up -d --pull {{ docker_mariadb.pull_policy }} --remove-orphans
+ExecStop={{ docker_mariadb.docker_binary }} compose -f {{ docker_mariadb.project_dir }}/compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

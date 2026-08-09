@@ -1,0 +1,81 @@
+---
+name: "{{ docker_ollama_server.project_name }}"
+
+networks:
+  ollama:
+    driver: bridge
+{% if docker_ollama_server.ingress.enabled | bool %}
+  ingress:
+    external: {{ docker_ollama_server.ingress.external | ternary('true', 'false') }}
+    name: "{{ docker_ollama_server.ingress.network_name }}"
+{% endif %}
+
+services:
+  ollama:
+    image: "{{ docker_ollama_server.image }}"
+    container_name: "{{ docker_ollama_server.container_name }}"
+    restart: "{{ docker_ollama_server.restart }}"
+    pull_policy: "{{ docker_ollama_server.pull_policy }}"
+    user: "{{ docker_ollama_server.runtime_user.uid }}:{{ docker_ollama_server.runtime_user.gid }}"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+{% if docker_ollama_server.gpu.enabled | bool %}
+    devices:
+{% for device in docker_ollama_server.gpu.devices %}
+      - "{{ device }}"
+{% endfor %}
+{% endif %}
+    environment:
+      HOME: /home/ollama
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_MODELS: /models
+      OLLAMA_CONTEXT_LENGTH: "{{ docker_ollama_server.server.context_length }}"
+      OLLAMA_MAX_LOADED_MODELS: "{{ docker_ollama_server.server.max_loaded_models }}"
+      OLLAMA_NUM_PARALLEL: "{{ docker_ollama_server.server.num_parallel }}"
+      OLLAMA_MAX_QUEUE: "{{ docker_ollama_server.server.max_queue }}"
+      OLLAMA_KEEP_ALIVE: "{{ docker_ollama_server.server.keep_alive }}"
+      OLLAMA_FLASH_ATTENTION: "{{ docker_ollama_server.server.flash_attention }}"
+      OLLAMA_KV_CACHE_TYPE: "{{ docker_ollama_server.server.kv_cache_type }}"
+      OLLAMA_NO_CLOUD: "{{ docker_ollama_server.server.no_cloud }}"
+{% for key, value in docker_ollama_server.extra_env.items() %}
+      {{ key }}: {{ value | to_json }}
+{% endfor %}
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      start_period: 30s
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ollama
+{% if docker_ollama_server.ingress.enabled | bool %}
+      - ingress
+{% endif %}
+{% if docker_ollama_server.api.publish | bool %}
+    ports:
+      - name: ollama-api
+        target: 11434
+        published: {{ docker_ollama_server.api.port }}
+        host_ip: "{{ docker_ollama_server.api.bind_address }}"
+        protocol: tcp
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ docker_ollama_server.data_dir }}"
+        target: /models
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1g,uid={{ docker_ollama_server.runtime_user.uid }},gid={{ docker_ollama_server.runtime_user.gid }}
+      - /home/ollama:rw,noexec,nosuid,size=64m,uid={{ docker_ollama_server.runtime_user.uid }},gid={{ docker_ollama_server.runtime_user.gid }}
+    mem_limit: "{{ docker_ollama_server.resources.memory_limit }}"
+    cpus: "{{ docker_ollama_server.resources.cpus }}"
+    pids_limit: {{ docker_ollama_server.resources.pids_limit }}
+    logging:
+      driver: "{{ docker_ollama_server.logging.driver }}"
+      options:
+{% for key, value in docker_ollama_server.logging.options.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}

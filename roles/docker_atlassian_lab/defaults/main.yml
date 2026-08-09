@@ -1,0 +1,75 @@
+---
+docker_atlassian_lab:
+  project_name: atlassian-lab
+  project_dir: /opt/docker/atlassian-lab
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: false
+  wait_timeout: 900
+  restart: unless-stopped
+
+  # This role is intentionally localhost-only and refuses non-lab operation.
+  lab_mode: true
+  bind_address: 127.0.0.1
+  timezone: Europe/Stockholm
+
+  jira:
+    image: docker-public.packages.atlassian.com/atlassian/jira-software:11.3.7
+    hostname: jira.localhost
+    https_port: 8443
+    data_dir: /opt/docker/atlassian-lab/jira
+    min_memory: 1024m
+    max_memory: 2048m
+    memory_limit: 3g
+    cpus: "2.0"
+    pids_limit: 512
+
+  confluence:
+    image: docker-public.packages.atlassian.com/atlassian/confluence:10.2.14
+    hostname: confluence.localhost
+    https_port: 8444
+    data_dir: /opt/docker/atlassian-lab/confluence
+    min_memory: 1024m
+    max_memory: 2048m
+    memory_limit: 3g
+    cpus: "2.0"
+    pids_limit: 512
+
+  proxy:
+    image: docker.io/library/nginx:1.28.0-alpine
+    memory_limit: 256m
+    cpus: "0.5"
+    pids_limit: 128
+
+  database:
+    network:
+      name: tmnt_postgres
+      external: true
+    jira:
+      host: postgres
+      port: "5432"
+      name: jira
+      user: jira
+      password: LAB_ONLY_JIRA_DB_PASSWORD_DO_NOT_REUSE
+    confluence:
+      host: postgres
+      port: "5432"
+      name: confluence
+      user: confluence
+      password: LAB_ONLY_CONFLUENCE_DB_PASSWORD_DO_NOT_REUSE
+
+  pki:
+    dir: /opt/docker/atlassian-lab/pki
+    ca_common_name: tmnt-lab disposable Atlassian CA
+    leaf_common_name: localhost
+    leaf_validity_days: 397
+    renew_before_days: 30
+    subject_alt_names:
+      - DNS:localhost
+      - DNS:jira.localhost
+      - DNS:confluence.localhost
+      - IP:127.0.0.1
+      - IP:::1

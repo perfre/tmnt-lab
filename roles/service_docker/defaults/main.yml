@@ -44,4 +44,23 @@ service_docker:
     storage-driver: overlay2
     live-restore: true
 
+  gpu:
+    enabled: false
+    vendor: nvidia
+    mode: cdi
+    verify: true
+    device: nvidia.com/gpu=all
+    nvidia:
+      packages:
+        - nvidia-container-toolkit
+      package_state: latest
+      apt:
+        repository_name: nvidia-container-toolkit
+        key_url: https://nvidia.github.io/libnvidia-container/gpgkey
+        repository_url: https://nvidia.github.io/libnvidia-container/stable/deb
+      yum:
+        repository_name: nvidia-container-toolkit
+        repository_url: https://nvidia.github.io/libnvidia-container/stable/rpm/$basearch
+        gpgkey: https://nvidia.github.io/libnvidia-container/gpgkey
+
   users: []

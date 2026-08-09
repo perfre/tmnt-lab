@@ -1,6 +1,6 @@
 # docker_netbox
 
-Runs NetBox with PostgreSQL and Valkey using Docker Compose.
+Runs NetBox with Valkey using Docker Compose. PostgreSQL is an external dependency owned by `docker_postgres`; its database and application user are owned by `ops_postgres`.
 
 All inventory/default configuration lives under `docker_netbox`.
 
@@ -11,7 +11,12 @@ docker_netbox:
   web:
     http_port: 8001
   database:
-    password: change-me
+    host: postgres
+    port: "5432"
+    password: LAB_ONLY_NETBOX_POSTGRES_PASSWORD_DO_NOT_REUSE
+    network:
+      name: tmnt_postgres
+      external: true
   redis:
     password: change-me-redis
     cache_password: change-me-redis-cache
@@ -25,3 +30,5 @@ docker_netbox:
 ```
 
 NetBox Docker images should be upgraded deliberately. The default tag follows the current `netbox-docker` release branch compatibility pattern rather than an unpinned `latest`.
+
+Deploy `docker_postgres` and `ops_postgres` before this role. For an existing installation, export `/opt/docker/netbox/postgres` and import it into the shared PostgreSQL service before switching the application; this refactor deliberately does not move or delete old database data.

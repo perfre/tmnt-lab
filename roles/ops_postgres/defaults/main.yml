@@ -1,0 +1,15 @@
+---
+ops_postgres:
+  lab_mode: true
+  login_host: 127.0.0.1
+  login_port: 5432
+  login_user: postgres
+  login_password: LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE
+  ssl_mode: disable
+  driver_packages:
+    Debian:
+      - python3-psycopg2
+    RedHat:
+      - python3-psycopg2
+  users: []
+  databases: []

@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_ollama_server
+  author: tmnt-lab
+  description: Run a hardened GPU-backed Ollama server using Docker Compose.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

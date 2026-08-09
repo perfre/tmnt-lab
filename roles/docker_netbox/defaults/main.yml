@@ -12,7 +12,6 @@ docker_netbox:
   restart: unless-stopped
 
   image: docker.io/netboxcommunity/netbox:v4.6-5.0.2
-  postgres_image: docker.io/postgres:18-alpine
   valkey_image: docker.io/valkey/valkey:9.1-alpine
 
   timezone: Europe/Stockholm
@@ -25,7 +24,6 @@ docker_netbox:
     http_port: 8001
 
   data_dirs:
-    postgres: /opt/docker/netbox/postgres
     redis: /opt/docker/netbox/redis
     redis_cache: /opt/docker/netbox/redis-cache
     media: /opt/docker/netbox/media
@@ -33,11 +31,16 @@ docker_netbox:
     scripts: /opt/docker/netbox/scripts
 
   database:
+    host: postgres
+    port: "5432"
     name: netbox
     user: netbox
-    password: netbox
+    password: ""
     conn_max_age: "300"
     disable_server_side_cursors: "False"
+    network:
+      name: tmnt_postgres
+      external: true
 
   redis:
     password: netbox-redis

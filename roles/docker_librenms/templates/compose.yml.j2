@@ -1,28 +1,12 @@
 ---
 name: "{{ docker_librenms.project_name }}"
 
-services:
-  db:
-    image: "{{ docker_librenms.mariadb_image }}"
-    container_name: librenms_db
-    command:
-      - mysqld
-      - --innodb-file-per-table=1
-      - --lower-case-table-names=0
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_unicode_ci
-    restart: "{{ docker_librenms.restart }}"
-    environment:
-      TZ: "{{ docker_librenms.timezone }}"
-      MARIADB_RANDOM_ROOT_PASSWORD: "{{ docker_librenms.database.root_password_random | bool | ternary('yes', 'no') }}"
-      MYSQL_DATABASE: "{{ docker_librenms.database.name }}"
-      MYSQL_USER: "{{ docker_librenms.database.user }}"
-      MYSQL_PASSWORD: "{{ docker_librenms.database.password }}"
-    volumes:
-      - type: bind
-        source: "{{ docker_librenms.db_dir }}"
-        target: /var/lib/mysql
+networks:
+  database:
+    external: {{ docker_librenms.database.network.external | ternary('true', 'false') }}
+    name: "{{ docker_librenms.database.network.name }}"
 
+services:
   redis:
     image: "{{ docker_librenms.redis_image }}"
     container_name: librenms_redis
@@ -50,7 +34,6 @@ services:
       - "{{ capability }}"
 {% endfor %}
     depends_on:
-      - db
       - redis
 {% if docker_librenms.services.msmtpd | bool %}
       - msmtpd
@@ -65,7 +48,8 @@ services:
       TZ: "{{ docker_librenms.timezone }}"
       PUID: "{{ docker_librenms.puid }}"
       PGID: "{{ docker_librenms.pgid }}"
-      DB_HOST: db
+      DB_HOST: "{{ docker_librenms.database.host }}"
+      DB_PORT: "{{ docker_librenms.database.port }}"
       DB_NAME: "{{ docker_librenms.database.name }}"
       DB_USER: "{{ docker_librenms.database.user }}"
       DB_PASSWORD: "{{ docker_librenms.database.password }}"
@@ -74,6 +58,9 @@ services:
       - type: bind
         source: "{{ docker_librenms.data_dir }}"
         target: /data
+    networks: &librenms-networks
+      - default
+      - database
 
 {% if docker_librenms.services.dispatcher | bool %}
   dispatcher:
@@ -96,6 +83,7 @@ services:
       DISPATCHER_NODE_ID: dispatcher1
       SIDECAR_DISPATCHER: "1"
     volumes: *librenms-volumes
+    networks: *librenms-networks
 {% endif %}
 
 {% if docker_librenms.services.syslogng | bool %}
@@ -125,6 +113,7 @@ services:
       <<: *librenms-environment
       SIDECAR_SYSLOGNG: "1"
     volumes: *librenms-volumes
+    networks: *librenms-networks
 {% endif %}
 
 {% if docker_librenms.services.snmptrapd | bool %}
@@ -154,4 +143,5 @@ services:
       <<: *librenms-environment
       SIDECAR_SNMPTRAPD: "1"
     volumes: *librenms-volumes
+    networks: *librenms-networks
 {% endif %}

@@ -1,0 +1,7 @@
+---
+- name: Restart docker postgres compose
+  ansible.builtin.systemd:
+    name: docker-postgres
+    state: restarted
+    daemon_reload: true
+  when: docker_postgres.apply | bool

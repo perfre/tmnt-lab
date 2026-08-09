@@ -1,0 +1,187 @@
+---
+- name: Validate ops_ollama_models configuration
+  ansible.builtin.assert:
+    that:
+      - ops_ollama_models is mapping
+      - ops_ollama_models.container_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - ops_ollama_models.models is sequence
+      - ops_ollama_models.models | length > 0
+      - (ops_ollama_models.models | map(attribute='name') | list | unique | length) == (ops_ollama_models.models | length)
+      - ops_ollama_models.operation_timeout | int >= 60
+      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.port | int > 0
+      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.port | int <= 65535
+      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.lab_mode | bool or ops_ollama_models.warm_api.scheme == 'https'
+      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.lab_mode | bool or ops_ollama_models.warm_api.validate_certs | bool
+      - not ops_ollama_models.lab_mode | bool or (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - not ops_ollama_models.lab_mode | bool or not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.host in ['localhost', '127.0.0.1', '::1']
+    fail_msg: >-
+      ops_ollama_models requires unique model definitions and safe warm-up transport.
+      Lab warm-up is loopback-only; non-lab warm-up requires verified HTTPS.
+
+- name: Validate Ollama model definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z0-9][A-Za-z0-9_.\\/-]*:[A-Za-z0-9][A-Za-z0-9_.-]*$')
+      - item.name is not search('-cloud$')
+      - item.type in ['llm', 'embedding']
+      - item.state in ['present', 'absent']
+      - item.warm is boolean
+      - item.license | length > 0
+      - item.source_url is match('^https://')
+    fail_msg: >-
+      Each model needs an explicit local model tag, llm/embedding type, present/absent state,
+      boolean warm flag, license, and HTTPS source. Cloud model tags are prohibited.
+  loop: "{{ ops_ollama_models.models }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+
+- name: Inspect the Ollama container
+  community.docker.docker_container_info:
+    name: "{{ ops_ollama_models.container_name }}"
+  register: ops_ollama_models_container
+
+- name: Require a running Ollama container
+  ansible.builtin.assert:
+    that:
+      - ops_ollama_models_container.exists
+      - ops_ollama_models_container.container.State.Running
+    fail_msg: "Deploy docker_ollama_server before running ops_ollama_models."
+
+- name: List installed Ollama models
+  community.docker.docker_container_exec:
+    container: "{{ ops_ollama_models.container_name }}"
+    argv:
+      - ollama
+      - list
+    timeout: 60
+  register: ops_ollama_models_list
+  changed_when: false
+
+- name: Pull missing or explicitly updated Ollama models
+  community.docker.docker_container_exec:
+    container: "{{ ops_ollama_models.container_name }}"
+    argv:
+      - ollama
+      - pull
+      - "{{ item.name }}"
+    timeout: "{{ ops_ollama_models.operation_timeout }}"
+  loop: "{{ ops_ollama_models.models }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - ops_ollama_models.apply | bool
+    - not ansible_check_mode
+    - item.state == 'present'
+    - >-
+      ops_ollama_models.update_present_models | bool
+      or not (ops_ollama_models_list.stdout is search('(?m)^' ~ (item.name | regex_escape) ~ '\\s'))
+  changed_when: true
+
+- name: Remove explicitly absent Ollama models
+  community.docker.docker_container_exec:
+    container: "{{ ops_ollama_models.container_name }}"
+    argv:
+      - ollama
+      - rm
+      - "{{ item.name }}"
+    timeout: "{{ ops_ollama_models.operation_timeout }}"
+  loop: "{{ ops_ollama_models.models }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - ops_ollama_models.apply | bool
+    - not ansible_check_mode
+    - item.state == 'absent'
+    - ops_ollama_models_list.stdout is search('(?m)^' ~ (item.name | regex_escape) ~ '\\s')
+  changed_when: true
+
+- name: Build the expected warm model list
+  ansible.builtin.set_fact:
+    ops_ollama_models_expected_warm: >-
+      {{ (ops_ollama_models_expected_warm | default([])) + [item.name] }}
+  loop: "{{ ops_ollama_models.models }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - item.state == 'present'
+    - item.warm | bool
+
+- name: Inspect loaded Ollama models before warm-up
+  ansible.builtin.uri:
+    url: >-
+      {{ ops_ollama_models.warm_api.scheme }}://{{ ops_ollama_models.warm_api.host }}:{{ ops_ollama_models.warm_api.port }}/api/ps
+    method: GET
+    headers: "{{ ops_ollama_models.warm_api.headers }}"
+    validate_certs: "{{ ops_ollama_models.warm_api.validate_certs | bool }}"
+    ca_path: "{{ ops_ollama_models.warm_api.ca_path | default(omit, true) }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ ops_ollama_models.warm_api.timeout }}"
+  register: ops_ollama_models_loaded_before
+  no_log: true
+  when:
+    - ops_ollama_models.apply | bool
+    - ops_ollama_models.warm_api.enabled | bool
+    - not ansible_check_mode
+
+- name: Warm configured Ollama models into memory
+  ansible.builtin.uri:
+    url: >-
+      {{ ops_ollama_models.warm_api.scheme }}://{{ ops_ollama_models.warm_api.host }}:{{ ops_ollama_models.warm_api.port }}{{ (item.type == 'embedding') | ternary('/api/embed', '/api/generate') }}
+    method: POST
+    headers: "{{ ops_ollama_models.warm_api.headers }}"
+    body_format: json
+    body: >-
+      {{
+        {'model': item.name, 'keep_alive': ops_ollama_models.warm_api.keep_alive}
+        | combine((item.type == 'embedding') | ternary({'input': 'warmup'}, {'prompt': 'Respond with OK.', 'stream': false}))
+      }}
+    validate_certs: "{{ ops_ollama_models.warm_api.validate_certs | bool }}"
+    ca_path: "{{ ops_ollama_models.warm_api.ca_path | default(omit, true) }}"
+    return_content: false
+    status_code: 200
+    timeout: "{{ ops_ollama_models.warm_api.timeout }}"
+  loop: "{{ ops_ollama_models.models }}"
+  loop_control:
+    label: "{{ item.name }}"
+  no_log: true
+  when:
+    - ops_ollama_models.apply | bool
+    - ops_ollama_models.warm_api.enabled | bool
+    - not ansible_check_mode
+    - item.state == 'present'
+    - item.warm | bool
+    - item.name not in (ops_ollama_models_loaded_before.json.models | default([]) | map(attribute='name') | list)
+
+- name: Inspect loaded Ollama models after warm-up
+  ansible.builtin.uri:
+    url: >-
+      {{ ops_ollama_models.warm_api.scheme }}://{{ ops_ollama_models.warm_api.host }}:{{ ops_ollama_models.warm_api.port }}/api/ps
+    method: GET
+    headers: "{{ ops_ollama_models.warm_api.headers }}"
+    validate_certs: "{{ ops_ollama_models.warm_api.validate_certs | bool }}"
+    ca_path: "{{ ops_ollama_models.warm_api.ca_path | default(omit, true) }}"
+    return_content: true
+    status_code: 200
+    timeout: "{{ ops_ollama_models.warm_api.timeout }}"
+  register: ops_ollama_models_loaded_after
+  no_log: true
+  when:
+    - ops_ollama_models.apply | bool
+    - ops_ollama_models.warm_api.enabled | bool
+    - not ansible_check_mode
+
+- name: Verify all requested models are loaded concurrently
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ops_ollama_models_expected_warm | default([]))
+        | difference(ops_ollama_models_loaded_after.json.models | map(attribute='name') | list)
+        | length == 0
+    fail_msg: >-
+      Not all warm models fit concurrently. Reduce model size, context length, or parallelism,
+      or increase available GPU/system memory.
+  when:
+    - ops_ollama_models.apply | bool
+    - ops_ollama_models.warm_api.enabled | bool
+    - not ansible_check_mode

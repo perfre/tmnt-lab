@@ -1,0 +1,58 @@
+---
+name: "{{ docker_mariadb.project_name }}"
+
+networks:
+  database:
+    name: "{{ docker_mariadb.network.name }}"
+    driver: bridge
+    internal: true
+
+secrets:
+  root_password:
+    file: ./root-password
+
+services:
+  mariadb:
+    image: "{{ docker_mariadb.image }}"
+    restart: "{{ docker_mariadb.restart }}"
+    pull_policy: "{{ docker_mariadb.pull_policy }}"
+    user: "999:999"
+    read_only: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/root_password
+      TZ: "{{ docker_mariadb.timezone }}"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    secrets:
+      - root_password
+    healthcheck:
+      test: ["CMD-SHELL", "healthcheck.sh --connect --innodb_initialized"]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      database:
+        aliases:
+          - "{{ docker_mariadb.network.alias }}"
+    ports:
+      - name: mariadb-admin
+        target: 3306
+        published: {{ docker_mariadb.listen_port }}
+        host_ip: "{{ docker_mariadb.bind_address }}"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: "{{ docker_mariadb.data_dir }}"
+        target: /var/lib/mysql
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+      - /run/mysqld:rw,noexec,nosuid,size=16m,uid=999,gid=999
+    mem_limit: "{{ docker_mariadb.resources.memory_limit }}"
+    cpus: "{{ docker_mariadb.resources.cpus }}"
+    pids_limit: {{ docker_mariadb.resources.pids_limit }}

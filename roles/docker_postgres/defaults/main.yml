@@ -1,0 +1,29 @@
+---
+docker_postgres:
+  project_name: postgres
+  project_dir: /opt/docker/postgres
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 120
+  restart: unless-stopped
+
+  # This initial shared database deployment is intentionally localhost-lab only.
+  lab_mode: true
+  bind_address: 127.0.0.1
+  image: docker.io/library/postgres:17-bookworm
+  data_dir: /opt/docker/postgres/data
+  listen_port: 5432
+  network:
+    name: tmnt_postgres
+    alias: postgres
+  admin_user: postgres
+  admin_password: LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE
+
+  resources:
+    memory_limit: 2g
+    cpus: "2.0"
+    pids_limit: 256
