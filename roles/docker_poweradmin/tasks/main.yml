@@ -31,6 +31,20 @@
       - docker_poweradmin.powerdns_api.key not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_poweradmin.powerdns_api.network.external | bool
       - docker_poweradmin.powerdns_api.network.name | length > 0
+      - docker_poweradmin.ldap.enabled is boolean
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.uri is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.uri is match('^ldaps://') or docker_poweradmin.ldap.allow_plaintext | bool
+      - not docker_poweradmin.ldap.enabled | bool or not docker_poweradmin.ldap.uri is match('^ldaps://') or docker_poweradmin.ldap.validate_certs | bool
+      - not docker_poweradmin.ldap.enabled | bool or not docker_poweradmin.ldap.validate_certs | bool or docker_poweradmin.ldap.ca_path | length > 0
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.ca_container_path is match('^/\\S+$')
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.bind_password | length >= 16
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.user_attribute | length > 0
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.search_filter | length > 0
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.network.external | bool
+      - not docker_poweradmin.ldap.enabled | bool or docker_poweradmin.ldap.network.name | length > 0
       - docker_poweradmin.admin.create | bool
       - docker_poweradmin.admin.username is match('^[A-Za-z0-9_.-]+$')
       - docker_poweradmin.admin.password | length >= 16
@@ -42,6 +56,7 @@
           or docker_poweradmin.powerdns_api.key is match('^LAB_ONLY_')
           or docker_poweradmin.admin.password is match('^LAB_ONLY_')
           or docker_poweradmin.session_key is match('^LAB_ONLY_')
+          or (docker_poweradmin.ldap.enabled | bool and docker_poweradmin.ldap.bind_password is match('^LAB_ONLY_'))
         )
         or not docker_poweradmin.web.publish | bool
         or docker_poweradmin.bind_address in ['127.0.0.1', '::1']
@@ -55,8 +70,8 @@
     fail_msg: >-
       docker_poweradmin requires explicit inventory settings, pinned images,
       database/API/admin credentials, external MariaDB and PowerDNS API networks,
-      and a short-lived TLS certificate. Synthetic LAB_ONLY credentials may only
-      be published on loopback.
+      optional verified LDAP settings, and a short-lived TLS certificate.
+      Synthetic LAB_ONLY credentials may only be published on loopback.
   no_log: true
 
 - name: Ensure Poweradmin project directories exist
@@ -206,8 +221,11 @@
       value: "{{ docker_poweradmin.admin.password }}"
     - name: session-key
       value: "{{ docker_poweradmin.session_key }}"
+    - name: ldap-bind-password
+      value: "{{ docker_poweradmin.ldap.bind_password }}"
   loop_control:
     label: "{{ item.name }}"
+  when: item.name != 'ldap-bind-password' or docker_poweradmin.ldap.enabled | bool
   no_log: true
   diff: false
   notify: Restart docker poweradmin compose
@@ -244,6 +262,7 @@
     name: docker-poweradmin
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Start or update Poweradmin Compose project
   community.docker.docker_compose_v2:
@@ -258,4 +277,6 @@
     remove_orphans: "{{ docker_poweradmin.remove_orphans | bool }}"
     wait: "{{ docker_poweradmin.wait | bool }}"
     wait_timeout: "{{ docker_poweradmin.wait_timeout }}"
-  when: docker_poweradmin.apply | bool
+  when:
+    - docker_poweradmin.apply | bool
+    - not ansible_check_mode

@@ -1,0 +1,30 @@
+---
+ops_openbao_ldap:  # noqa: var-naming[no-role-prefix]
+  apply: true
+  enabled: false
+  docker_binary: /usr/bin/docker
+  project_dir: /opt/docker/openbao
+  project_name: openbao
+  service: openbao
+  token: ""
+  mount_path: ldap
+  ldap:
+    url: ldaps://openldap:1636
+    start_tls: false
+    insecure_tls: false
+    certificate_container_path: /bao/config/ldap-ca.crt
+    bind_dn: ""
+    bind_password: ""
+    user_dn: ou=people,dc=example,dc=org
+    user_attr: uid
+    group_dn: ou=groups,dc=example,dc=org
+    group_filter: "(&(objectClass=groupOfNames)(member={{.UserDN}}))"
+    group_attr: cn
+    discover_dn: false
+    deny_null_bind: true
+    case_sensitive_names: false
+    username_as_alias: true
+  groups:
+    - name: openbao-admins
+      policies:
+        - admin

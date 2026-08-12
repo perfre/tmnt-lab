@@ -23,6 +23,8 @@ service_docker
   -> docker_openldap
      -> ops_openldap
      -> docker_ldap_account_manager
+  -> docker_freeradius
+  -> docker_tacacs_plus
 ```
 
 ## Prerequisites
@@ -105,7 +107,7 @@ Deploy the complete lab:
 /usr/local/bin/deploy services.yml -K
 ```
 
-Before a complete deployment, read the MariaDB, PostgreSQL, LibreNMS, NetBox, Zabbix, Atlassian, PowerDNS, and Poweradmin role READMEs. The database refactor does not migrate data from older embedded database directories; application reconciliation can stop those old containers as orphans.
+Before a complete deployment, read the MariaDB, PostgreSQL, LibreNMS, NetBox, Zabbix, Atlassian, PowerDNS, Poweradmin, FreeRADIUS, and TACACS+ role READMEs. The database refactor does not migrate data from older embedded database directories; application reconciliation can stop those old containers as orphans.
 Also read the OpenLDAP, OpenLDAP operations, and LDAP Account Manager READMEs before deploying the LDAP stack because those roles create directory data, TLS material, and management UI state.
 
 Deploy or check one component with tags and a limit:
@@ -115,6 +117,8 @@ Deploy or check one component with tags and a limit:
   --tags docker_netbox --limit netbox
 /usr/local/bin/deploy services.yml -K \
   --tags docker_openldap,ops_openldap,docker_ldap_account_manager --limit ldap
+/usr/local/bin/deploy services.yml -K \
+  --tags docker_freeradius,docker_tacacs_plus --limit radius:tacacs
 /usr/local/bin/deploy services.yml -K \
   --check --diff --tags docker_ollama_server --limit ollama_server
 ```
@@ -135,6 +139,8 @@ Selecting only an application tag assumes its host and operational prerequisites
 | Poweradmin | `https://poweradmin.localhost:8445` | MariaDB database `powerdns` |
 | OpenLDAP LDAPS | `ldaps://127.0.0.1:1636` | `/opt/docker/openldap/data` |
 | LDAP Account Manager | `https://lam.localhost:8446` | `/opt/docker/ldap-account-manager` |
+| FreeRADIUS | `127.0.0.1:1812/udp`, `127.0.0.1:1813/udp` | `/opt/docker/freeradius` |
+| TACACS+ | `127.0.0.1:4949/tcp` | `/opt/docker/tacacs-plus` |
 | Zabbix | `http://localhost:8080` | `/opt/docker/zabbix` |
 | MariaDB | loopback administration only | `/opt/docker/mariadb/data` |
 | PostgreSQL | loopback administration only | `/opt/docker/postgres/data` |
@@ -143,7 +149,9 @@ MariaDB and PostgreSQL keep application traffic on internal Docker networks (`tm
 
 PowerDNS authoritative owns the internal `tmnt_powerdns_api` network for Poweradmin API access and the internal `tmnt_powerdns_dns` network for optional recursor zone forwarding. Poweradmin initializes its own tables and the PowerDNS schema in the shared `powerdns` MariaDB database on first startup. The local inventory explicitly publishes the Poweradmin Nginx GUI through the proxy-only `poweradmin_ingress` bridge on `127.0.0.1:8445` as `https://poweradmin.localhost:8445`.
 
-OpenLDAP publishes only LDAPS on loopback in the local inventory, generates local TLS when certificate paths are not supplied, and provisions users/groups through `ops_openldap` over CA-validated LDAPS. LDAP Account Manager connects to OpenLDAP over the internal `tmnt_openldap` network and publishes only its HTTPS proxy on `127.0.0.1:8446` in the local inventory.
+OpenLDAP publishes only LDAPS on loopback in the local inventory, generates local TLS when certificate paths are not supplied, and provisions users, service bind accounts, and groups through `ops_openldap` over CA-validated LDAPS. LDAP Account Manager, NetBox, Poweradmin, LibreNMS, Zabbix runtime, FreeRADIUS, and TACACS+ connect to OpenLDAP over the external `tmnt_openldap` Docker network when their LDAP options are enabled.
+
+LibreNMS LDAP application settings are reconciled by `ops_librenms_ldap`. Zabbix and OpenBao also have LDAP ops roles, but the committed local inventory leaves those stateful API/operator-token steps disabled until an operator supplies a protected Zabbix API credential and OpenBao token.
 
 Treat plaintext or broadly bound endpoints in older roles as known remediation debt; do not expose this WSL environment to an untrusted network.
 
@@ -184,6 +192,8 @@ Production status:
 - `docker_openldap`: production-capable when inventory supplies real secret material, correct DN/SAN values, verified TLS trust, and deliberate publish/bind settings.
 - `ops_openldap`: production-capable when inventory uses verified LDAPS or StartTLS and real bind credentials from a protected source.
 - `docker_ldap_account_manager`: production-capable when inventory supplies verified LDAPS trust, a least-privilege LDAP bind account, and production web TLS or authenticated ingress.
+- `docker_freeradius` and `docker_tacacs_plus`: production-capable when inventory supplies real AAA client secrets, verified LDAP trust, intentional bind addresses, and protected service bind credentials.
+- `ops_librenms_ldap`, `ops_zabbix_ldap`, and `ops_openbao_ldap`: production-capable only with protected app API/operator credentials and verified LDAP trust. The OpenBao role also requires an already initialized and unsealed deployment.
 - `ops_mariadb` and `ops_postgres`: inventory-profiled for loopback administrative bootstrap; non-loopback operations require verified database TLS where the module supports it.
 - `docker_mariadb`, `docker_postgres`, `docker_atlassian_lab`, `docker_powerdns`, `docker_powerdns_recursor`, and `docker_poweradmin`: usable for the committed localhost profile but still blocked from production until their documented TLS, secret, ingress, DNS-encryption, or migration gaps are closed.
 - LibreNMS, NetBox, Zabbix, OpenBao, and test-fixture roles still have production security debt. Do not treat them as production-ready without completing their TLS, secret, ingress, and image-pinning work.
@@ -214,7 +224,7 @@ sudo systemctl start docker-ollama-server
 
 Choose a backup destination outside `/opt/docker` and protect it according to the data it contains.
 
-For OpenLDAP, back up `/opt/docker/openldap/data`, `/opt/docker/openldap/config`, and any generated PKI before schema, image, or DN changes. For LDAP Account Manager, back up `/opt/docker/ldap-account-manager/config` and `/opt/docker/ldap-account-manager/main-config` before upgrades.
+For OpenLDAP, back up `/opt/docker/openldap/data`, `/opt/docker/openldap/config`, and any generated PKI before schema, image, or DN changes. For LDAP Account Manager, back up `/opt/docker/ldap-account-manager/config` and `/opt/docker/ldap-account-manager/main-config` before upgrades. For FreeRADIUS and TACACS+, back up the rendered config directories before changing AAA client policies or shared keys.
 
 ## Stop and remove runtime containers
 
@@ -234,6 +244,8 @@ The roles do not automate destructive data deletion. Confirm exact paths and ver
 - If both models cannot stay loaded, reduce context or parallelism before choosing smaller models.
 - For OpenLDAP, verify LDAPS with `openssl s_client` and query memberOf with `ldapsearch` using the configured CA file.
 - For LDAP Account Manager, inspect `systemctl status docker-ldap-account-manager` and the `lam`/`tls-proxy` container logs.
+- For FreeRADIUS, inspect `systemctl status docker-freeradius`, run `docker compose -f /opt/docker/freeradius/compose.yml config --quiet`, and test PAP LDAP authentication with a RADIUS client using the configured shared secret.
+- For TACACS+, inspect `systemctl status docker-tacacs-plus`, run `docker compose -f /opt/docker/tacacs-plus/compose.yml config --quiet`, and test with a TACACS+ client against `127.0.0.1:4949`.
 - Inspect `systemctl status docker-ollama-server` and `docker logs ollama_server` for startup failures.
 - Run `docker compose ... config --quiet` against rendered Compose before restarting a service.
 - Role-specific variables, trust boundaries, migrations, and reset procedures are documented in each `roles/<role>/README.md`.

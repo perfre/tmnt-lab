@@ -1,0 +1,70 @@
+---
+name: "{{ docker_tacacs_plus.project_name }}"
+
+networks:
+{% if docker_tacacs_plus.ldap.enabled | bool %}
+  ldap:
+    external: {{ docker_tacacs_plus.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_tacacs_plus.ldap.network.name }}"
+{% endif %}
+
+services:
+  tacacs-plus:
+    image: "{{ docker_tacacs_plus.image_name }}"
+    build:
+      context: ./image
+    restart: "{{ docker_tacacs_plus.restart }}"
+    pull_policy: "{{ docker_tacacs_plus.pull_policy }}"
+    user: "{{ docker_tacacs_plus.run_uid }}:{{ docker_tacacs_plus.run_gid }}"
+    init: true
+    read_only: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_tacacs_plus.timezone }}"
+{% if docker_tacacs_plus.publish | bool %}
+    ports:
+      - name: tacacs-plus
+        target: {{ docker_tacacs_plus.container_port }}
+        published: {{ docker_tacacs_plus.published_port }}
+        host_ip: "{{ docker_tacacs_plus.bind_address }}"
+        protocol: tcp
+{% endif %}
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "{{ docker_tacacs_plus.container_port }}"]
+      start_period: 10s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ docker_tacacs_plus.config_dir }}/tac_plus-ng.cfg"
+        target: /etc/tacacs-plus/tac_plus-ng.cfg
+        read_only: true
+{% if docker_tacacs_plus.ldap.enabled | bool and docker_tacacs_plus.ldap.validate_certs | bool %}
+      - type: bind
+        source: "{{ docker_tacacs_plus.ldap.ca_path }}"
+        target: "{{ docker_tacacs_plus.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
+      - type: bind
+        source: "{{ docker_tacacs_plus.log_dir }}"
+        target: /var/log/tacacs-plus
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid={{ docker_tacacs_plus.run_uid }},gid={{ docker_tacacs_plus.run_gid }}
+    networks:
+      - default
+{% if docker_tacacs_plus.ldap.enabled | bool %}
+      - ldap
+{% endif %}
+    mem_limit: "{{ docker_tacacs_plus.resources.memory_limit }}"
+    cpus: "{{ docker_tacacs_plus.resources.cpus }}"
+    pids_limit: {{ docker_tacacs_plus.resources.pids_limit }}
+    logging:
+      driver: "{{ docker_tacacs_plus.logging.driver }}"
+      options:
+{% for key, value in docker_tacacs_plus.logging.options.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}

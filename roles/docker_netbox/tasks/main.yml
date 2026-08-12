@@ -4,16 +4,87 @@
     that:
       - docker_netbox is mapping
       - docker_netbox.project_dir | length > 0
+      - docker_netbox.allowed_hosts is sequence
+      - docker_netbox.allowed_hosts | length > 0
+      - "'*' not in docker_netbox.allowed_hosts"
       - docker_netbox.database.host | length > 0
       - docker_netbox.database.port | int > 0
       - docker_netbox.database.port | int <= 65535
-      - docker_netbox.database.password | length > 0
+      - docker_netbox.database.password | length >= 16
+      - docker_netbox.database.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_netbox.database.network.external | bool
       - docker_netbox.database.network.name | length > 0
-      - docker_netbox.redis.password | length > 0
-      - docker_netbox.redis.cache_password | length > 0
+      - docker_netbox.redis.password | length >= 16
+      - docker_netbox.redis.password not in ['password', 'changeme', 'CHANGE_ME', 'admin', 'netbox-redis', 'change-me-redis']
+      - docker_netbox.redis.cache_password | length >= 16
+      - docker_netbox.redis.cache_password not in ['password', 'changeme', 'CHANGE_ME', 'admin', 'netbox-redis-cache', 'change-me-redis-cache']
       - docker_netbox.security.secret_key | length >= 50
-    fail_msg: "docker_netbox must be a dictionary with project_dir, service passwords, and a secret_key of at least 50 characters."
+      - docker_netbox.security.secret_key is not search('change-me')
+      - docker_netbox.security.api_token_pepper_1 | length >= 32
+      - docker_netbox.security.api_token_pepper_1 is not search('change-me')
+      - not docker_netbox.superuser.enabled | bool or docker_netbox.superuser.password | length >= 16
+      - >-
+        not docker_netbox.superuser.enabled | bool
+        or docker_netbox.superuser.password not in ['password', 'changeme', 'CHANGE_ME', 'admin', 'change-me-admin']
+      - docker_netbox.superuser.api_token | length == 0 or docker_netbox.superuser.api_token | length >= 32
+      - docker_netbox.ldap.enabled is boolean
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.server_uri is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.server_uri is match('^ldaps://')
+        or docker_netbox.ldap.start_tls | bool
+        or docker_netbox.ldap.allow_plaintext | bool
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or not (
+          docker_netbox.ldap.server_uri is match('^ldaps://')
+          or docker_netbox.ldap.start_tls | bool
+        )
+        or docker_netbox.ldap.validate_certs | bool
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or not docker_netbox.ldap.validate_certs | bool
+        or docker_netbox.ldap.ca_path | length > 0
+      - not docker_netbox.ldap.enabled | bool or docker_netbox.ldap.ca_container_path is match('^/\\S+$')
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_netbox.ldap.enabled | bool or docker_netbox.ldap.bind_password | length >= 16
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.user_search_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.group_search_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_netbox.ldap.enabled | bool or docker_netbox.ldap.user_search_attr | length > 0
+      - not docker_netbox.ldap.enabled | bool or docker_netbox.ldap.group_search_class | length > 0
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.group_type in ['GroupOfNamesType', 'GroupOfUniqueNamesType', 'NestedGroupOfNamesType']
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.require_group_dn | length == 0
+        or docker_netbox.ldap.require_group_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.admin_group_dn | length == 0
+        or docker_netbox.ldap.admin_group_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not docker_netbox.ldap.enabled | bool
+        or docker_netbox.ldap.superuser_group_dn | length == 0
+        or docker_netbox.ldap.superuser_group_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_netbox.ldap.enabled | bool or docker_netbox.ldap.network.external | bool
+      - not docker_netbox.ldap.enabled | bool or docker_netbox.ldap.network.name | length > 0
+    fail_msg: >-
+      docker_netbox must define its project directory, service passwords,
+      secret_key, and when LDAP is enabled a verified LDAPS/StartTLS connection,
+      bind account, search DNs, and external LDAP network.
+  no_log: true
 
 - name: Ensure NetBox project directories exist
   ansible.builtin.file:
@@ -82,6 +153,7 @@
     name: docker-netbox
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Start or update NetBox Compose project
   community.docker.docker_compose_v2:
@@ -96,4 +168,6 @@
     remove_orphans: "{{ docker_netbox.remove_orphans | bool }}"
     wait: "{{ docker_netbox.wait | bool }}"
     wait_timeout: "{{ docker_netbox.wait_timeout | default(omit, true) }}"
-  when: docker_netbox.apply | bool
+  when:
+    - docker_netbox.apply | bool
+    - not ansible_check_mode

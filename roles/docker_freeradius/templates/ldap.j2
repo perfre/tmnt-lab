@@ -1,0 +1,32 @@
+ldap {
+	server = {{ docker_freeradius.ldap.server_uri | to_json }}
+	identity = {{ docker_freeradius.ldap.bind_dn | to_json }}
+	password = {{ docker_freeradius.ldap.bind_password | to_json }}
+	base_dn = {{ docker_freeradius.ldap.base_dn | to_json }}
+
+	user {
+		base_dn = {{ docker_freeradius.ldap.user_base_dn | to_json }}
+		filter = {{ docker_freeradius.ldap.user_filter | to_json }}
+	}
+
+	group {
+		base_dn = {{ docker_freeradius.ldap.group_base_dn | to_json }}
+		membership_filter = {{ docker_freeradius.ldap.group_filter | to_json }}
+		membership_attribute = {{ docker_freeradius.ldap.membership_attribute | to_json }}
+	}
+
+	options {
+		chase_referrals = no
+		rebind = no
+		res_timeout = 5
+		srv_timelimit = 5
+		net_timeout = 5
+	}
+
+	tls {
+		start_tls = {{ docker_freeradius.ldap.start_tls | ternary('yes', 'no') }}
+		ca_file = {{ docker_freeradius.ldap.ca_container_path | to_json }}
+		require_cert = {{ docker_freeradius.ldap.require_cert | to_json }}
+		tls_min_version = {{ docker_freeradius.ldap.tls_min_version | to_json }}
+	}
+}

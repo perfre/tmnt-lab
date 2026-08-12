@@ -285,6 +285,7 @@
     name: docker-openldap
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Start or update OpenLDAP Compose project
   community.docker.docker_compose_v2:
@@ -300,4 +301,6 @@
     remove_orphans: "{{ docker_openldap.remove_orphans | bool }}"
     wait: "{{ docker_openldap.wait | bool }}"
     wait_timeout: "{{ docker_openldap.wait_timeout }}"
-  when: docker_openldap.apply | bool
+  when:
+    - docker_openldap.apply | bool
+    - not ansible_check_mode

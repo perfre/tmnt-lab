@@ -1,6 +1,13 @@
 ---
 name: "{{ docker_openbao.project_name }}"
 
+{% if docker_openbao.ldap.enabled | bool %}
+networks:
+  ldap:
+    external: {{ docker_openbao.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_openbao.ldap.network.name }}"
+
+{% endif %}
 services:
   openbao:
     image: "{{ docker_openbao.image }}"
@@ -31,9 +38,19 @@ services:
       - type: bind
         source: "{{ docker_openbao.data_dir }}"
         target: /bao/file
+{% if docker_openbao.ldap.enabled | bool %}
+      - type: bind
+        source: "{{ docker_openbao.ldap.ca_path }}"
+        target: "{{ docker_openbao.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
 {% for mount in docker_openbao.volumes %}
       - type: bind
         source: "{{ mount.source }}"
         target: "{{ mount.target }}"
         read_only: {{ mount.read_only | default(false) | ternary('true', 'false') }}
 {% endfor %}
+{% if docker_openbao.ldap.enabled | bool %}
+    networks:
+      - ldap
+{% endif %}

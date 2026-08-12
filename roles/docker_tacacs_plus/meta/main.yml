@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_tacacs_plus
+  author: tmnt-lab
+  description: Build and run a Debian tac_plus-ng TACACS+ container with optional verified LDAP backend.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

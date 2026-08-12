@@ -1,0 +1,51 @@
+---
+ops_zabbix_ldap:  # noqa: var-naming[no-role-prefix]
+  apply: true
+  enabled: false
+  api:
+    host: zabbix.example.invalid
+    port: 443
+    use_ssl: true
+    validate_certs: true
+    allow_plaintext: false
+    url_path: ""
+    username: Admin
+    password: ""
+    token: ""
+  user_directory:
+    name: TMNT OpenLDAP
+    description: Inventory-managed OpenLDAP directory
+    host: ldaps://openldap
+    port: 1636
+    start_tls: 0
+    base_dn: ou=people,dc=example,dc=org
+    search_attribute: uid
+    search_filter: "(&(objectClass=posixAccount)(%{attr}=%{user}))"
+    bind_dn: ""
+    bind_password: ""
+    group_basedn: ou=groups,dc=example,dc=org
+    group_filter: "(member=%{ref})"
+    group_member: member
+    group_membership: memberOf
+    group_name: cn
+    user_ref_attr: dn
+    user_username: givenName
+    user_lastname: sn
+    provision_status: true
+    provision_groups:
+      - name: zabbix-admins
+        role: Super admin role
+        user_groups:
+          - Zabbix administrators
+    provision_media: []
+  authentication:
+    authentication_type: ldap
+    ldap_auth_enabled: true
+    ldap_case_sensitive: true
+    ldap_jit_status: true
+    jit_provision_interval: 1h
+    disabled_user_group: Disabled
+  user_groups:
+    - name: Disabled
+      gui_access: disable
+      status: disabled

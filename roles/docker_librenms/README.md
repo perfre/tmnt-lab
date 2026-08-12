@@ -21,6 +21,11 @@ docker_librenms:
     syslogng: true
     snmptrapd: true
     msmtpd: true
+  ldap:
+    enabled: true
+    ca_path: /opt/docker/openldap/pki/ca.crt
 ```
 
-Deploy `docker_mariadb` and `ops_mariadb` before this role. For an existing installation, export `/opt/docker/librenms/db` and import it into the shared MariaDB service before switching the application; this refactor deliberately does not move or delete old database data.
+When `ldap.enabled` is true, the runtime joins the external LDAP network and mounts the OpenLDAP CA bundle for LibreNMS. Application authentication settings are reconciled separately by `ops_librenms_ldap` through the `lnms` CLI so runtime and application state remain distinct.
+
+Deploy `docker_mariadb` and `ops_mariadb` before this role. Deploy `docker_openldap` and `ops_openldap` before enabling LDAP. For an existing installation, export `/opt/docker/librenms/db` and import it into the shared MariaDB service before switching the application; this refactor deliberately does not move or delete old database data.

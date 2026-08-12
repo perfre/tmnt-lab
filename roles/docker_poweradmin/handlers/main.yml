@@ -5,4 +5,6 @@
     state: restarted
     daemon_reload: true
   no_log: true
-  when: docker_poweradmin.apply | bool
+  when:
+    - docker_poweradmin.apply | bool
+    - not ansible_check_mode

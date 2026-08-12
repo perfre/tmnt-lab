@@ -1,0 +1,67 @@
+server default {
+	listen {
+		type = auth
+		ipaddr = *
+		port = 1812
+	}
+
+	listen {
+		type = acct
+		ipaddr = *
+		port = 1813
+	}
+
+	authorize {
+		preprocess
+		chap
+		mschap
+		suffix
+		files
+{% if docker_freeradius.ldap.enabled | bool %}
+		ldap
+		if ((ok || updated) && User-Password) {
+			update control {
+				Auth-Type := LDAP
+			}
+		}
+{% endif %}
+		expiration
+		logintime
+		pap
+	}
+
+	authenticate {
+		Auth-Type PAP {
+			pap
+		}
+
+		Auth-Type CHAP {
+			chap
+		}
+
+		Auth-Type MS-CHAP {
+			mschap
+		}
+
+{% if docker_freeradius.ldap.enabled | bool %}
+		Auth-Type LDAP {
+			ldap
+		}
+{% endif %}
+	}
+
+	accounting {
+		detail
+		unix
+	}
+
+	post-auth {
+		update {
+			&reply: += &session-state:
+		}
+
+		Post-Auth-Type REJECT {
+			attr_filter.access_reject
+		}
+	}
+}

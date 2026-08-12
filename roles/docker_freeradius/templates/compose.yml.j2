@@ -1,0 +1,86 @@
+---
+name: "{{ docker_freeradius.project_name }}"
+
+networks:
+{% if docker_freeradius.ldap.enabled | bool %}
+  ldap:
+    external: {{ docker_freeradius.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_freeradius.ldap.network.name }}"
+{% endif %}
+
+services:
+  freeradius:
+    image: "{{ docker_freeradius.image_name }}"
+    build:
+      context: ./image
+    restart: "{{ docker_freeradius.restart }}"
+    pull_policy: "{{ docker_freeradius.pull_policy }}"
+    user: "{{ docker_freeradius.run_uid }}:{{ docker_freeradius.run_gid }}"
+    init: true
+    read_only: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_freeradius.timezone }}"
+{% if docker_freeradius.publish | bool %}
+    ports:
+      - name: radius-auth
+        target: 1812
+        published: {{ docker_freeradius.auth_port }}
+        host_ip: "{{ docker_freeradius.bind_address }}"
+        protocol: udp
+      - name: radius-accounting
+        target: 1813
+        published: {{ docker_freeradius.accounting_port }}
+        host_ip: "{{ docker_freeradius.bind_address }}"
+        protocol: udp
+{% endif %}
+    healthcheck:
+      test: ["CMD", "/usr/sbin/freeradius", "-C"]
+      start_period: 10s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ docker_freeradius.config_dir }}/clients.conf"
+        target: /etc/freeradius/3.0/clients.conf
+        read_only: true
+      - type: bind
+        source: "{{ docker_freeradius.config_dir }}/default-site"
+        target: /etc/freeradius/3.0/sites-enabled/default
+        read_only: true
+{% if docker_freeradius.ldap.enabled | bool %}
+      - type: bind
+        source: "{{ docker_freeradius.config_dir }}/ldap"
+        target: /etc/freeradius/3.0/mods-enabled/ldap
+        read_only: true
+{% if docker_freeradius.ldap.validate_certs | bool %}
+      - type: bind
+        source: "{{ docker_freeradius.ldap.ca_path }}"
+        target: "{{ docker_freeradius.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
+{% endif %}
+      - type: bind
+        source: "{{ docker_freeradius.log_dir }}"
+        target: /var/log/freeradius
+    tmpfs:
+      - /run/freeradius:rw,noexec,nosuid,size=16m,uid={{ docker_freeradius.run_uid }},gid={{ docker_freeradius.run_gid }}
+      - /tmp:rw,noexec,nosuid,size=32m
+    networks:
+      - default
+{% if docker_freeradius.ldap.enabled | bool %}
+      - ldap
+{% endif %}
+    mem_limit: "{{ docker_freeradius.resources.memory_limit }}"
+    cpus: "{{ docker_freeradius.resources.cpus }}"
+    pids_limit: {{ docker_freeradius.resources.pids_limit }}
+    logging:
+      driver: "{{ docker_freeradius.logging.driver }}"
+      options:
+{% for key, value in docker_freeradius.logging.options.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}

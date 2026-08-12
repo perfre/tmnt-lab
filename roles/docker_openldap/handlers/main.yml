@@ -4,4 +4,6 @@
     name: docker-openldap
     state: restarted
     daemon_reload: true
-  when: docker_openldap.apply | bool
+  when:
+    - docker_openldap.apply | bool
+    - not ansible_check_mode

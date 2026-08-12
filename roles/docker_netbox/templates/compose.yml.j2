@@ -5,6 +5,11 @@ networks:
   database:
     external: {{ docker_netbox.database.network.external | ternary('true', 'false') }}
     name: "{{ docker_netbox.database.network.name }}"
+{% if docker_netbox.ldap.enabled | bool %}
+  ldap:
+    external: {{ docker_netbox.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_netbox.ldap.network.name }}"
+{% endif %}
 
 services:
   netbox:
@@ -38,6 +43,12 @@ services:
         source: "{{ docker_netbox.data_dirs.config }}/zz_tmnt_lab_compatibility.py"
         target: /etc/netbox/config/zz_tmnt_lab_compatibility.py
         read_only: true
+{% if docker_netbox.ldap.enabled | bool and docker_netbox.ldap.validate_certs | bool %}
+      - type: bind
+        source: "{{ docker_netbox.ldap.ca_path }}"
+        target: "{{ docker_netbox.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
       - type: bind
         source: "{{ docker_netbox.data_dirs.media }}"
         target: /opt/netbox/netbox/media
@@ -56,6 +67,9 @@ services:
     networks: &netbox-networks
       - default
       - database
+{% if docker_netbox.ldap.enabled | bool %}
+      - ldap
+{% endif %}
 
 {% if docker_netbox.services.worker | bool %}
   netbox-worker:

@@ -7,6 +7,11 @@ networks:
   database:
     external: {{ docker_zabbix.database.network.external | ternary('true', 'false') }}
     name: "{{ docker_zabbix.database.network.name }}"
+{% if docker_zabbix.ldap.enabled | bool %}
+  ldap:
+    external: {{ docker_zabbix.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_zabbix.ldap.network.name }}"
+{% endif %}
 
 services:
   zabbix-server:
@@ -57,19 +62,32 @@ services:
       POSTGRES_PASSWORD: "{{ docker_zabbix.database.password }}"
       ZBX_SERVER_HOST: zabbix-server
       PHP_TZ: "{{ docker_zabbix.timezone }}"
+{% if docker_zabbix.ldap.enabled | bool and docker_zabbix.ldap.validate_certs | bool %}
+      LDAPTLS_CACERT: "{{ docker_zabbix.ldap.ca_container_path }}"
+      LDAPTLS_REQCERT: demand
+{% endif %}
 {% for key, value in docker_zabbix.web.env.items() %}
       {{ key }}: {{ value | to_json }}
 {% endfor %}
     networks:
       - zabbix
       - database
+{% if docker_zabbix.ldap.enabled | bool %}
+      - ldap
+{% endif %}
     ports:
       - "{{ docker_zabbix.web.http_port }}:8080"
 {% if docker_zabbix.web.https_port %}
       - "{{ docker_zabbix.web.https_port }}:8443"
 {% endif %}
-{% if docker_zabbix.web.volumes | length > 0 %}
+{% if docker_zabbix.web.volumes | length > 0 or (docker_zabbix.ldap.enabled | bool and docker_zabbix.ldap.validate_certs | bool) %}
     volumes:
+{% if docker_zabbix.ldap.enabled | bool and docker_zabbix.ldap.validate_certs | bool %}
+      - type: bind
+        source: "{{ docker_zabbix.ldap.ca_path }}"
+        target: "{{ docker_zabbix.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
 {% for mount in docker_zabbix.web.volumes %}
       - type: bind
         source: "{{ mount.source }}"

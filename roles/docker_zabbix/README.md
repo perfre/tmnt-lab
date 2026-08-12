@@ -17,6 +17,9 @@ docker_zabbix:
       external: true
   web:
     http_port: 8080
+  ldap:
+    enabled: true
+    ca_path: /opt/docker/openldap/pki/ca.crt
   plugin_mounts:
     - source: /srv/zabbix/plugins/externalscripts
       target: /usr/lib/zabbix/externalscripts
@@ -26,4 +29,6 @@ docker_zabbix:
       read_only: true
 ```
 
-Deploy `docker_postgres` and `ops_postgres` before this role. For an existing installation, export `/opt/docker/zabbix/postgres` and import it into the shared PostgreSQL service before switching the application; this refactor deliberately does not move or delete old database data.
+When `ldap.enabled` is true, the Zabbix web container joins the external LDAP network and receives `LDAPTLS_CACERT` pointing at the mounted OpenLDAP CA. Zabbix LDAP user-directory and authentication settings are reconciled separately by `ops_zabbix_ldap` through the Zabbix API; that role requires an API token or protected administrator credential.
+
+Deploy `docker_postgres` and `ops_postgres` before this role. Deploy `docker_openldap` and `ops_openldap` before enabling LDAP. For an existing installation, export `/opt/docker/zabbix/postgres` and import it into the shared PostgreSQL service before switching the application; this refactor deliberately does not move or delete old database data.

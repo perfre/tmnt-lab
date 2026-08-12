@@ -1,0 +1,201 @@
+---
+- name: Validate docker_freeradius configuration
+  ansible.builtin.assert:
+    that:
+      - docker_freeradius is mapping
+      - docker_freeradius.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_freeradius.project_dir is match('^/\\S+$')
+      - docker_freeradius.config_dir is match('^/\\S+$')
+      - docker_freeradius.run_dir is match('^/\\S+$')
+      - docker_freeradius.log_dir is match('^/\\S+$')
+      - docker_freeradius.image_name is not search(':latest$')
+      - docker_freeradius.base_image is search('@sha256:[0-9a-f]{64}$')
+      - docker_freeradius.run_uid | int >= 0
+      - docker_freeradius.run_gid | int >= 0
+      - docker_freeradius.auth_port | int >= 1024
+      - docker_freeradius.auth_port | int <= 65535
+      - docker_freeradius.accounting_port | int >= 1024
+      - docker_freeradius.accounting_port | int <= 65535
+      - docker_freeradius.auth_port | int != docker_freeradius.accounting_port | int
+      - not docker_freeradius.publish | bool or docker_freeradius.bind_address | length > 0
+      - docker_freeradius.clients is sequence
+      - docker_freeradius.clients | length > 0
+      - docker_freeradius.ldap.enabled is boolean
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.server_uri is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.server_uri is match('^ldaps://')
+        or docker_freeradius.ldap.start_tls | bool
+        or docker_freeradius.ldap.allow_plaintext | bool
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or not (
+          docker_freeradius.ldap.server_uri is match('^ldaps://')
+          or docker_freeradius.ldap.start_tls | bool
+        )
+        or docker_freeradius.ldap.validate_certs | bool
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or not docker_freeradius.ldap.validate_certs | bool
+        or docker_freeradius.ldap.ca_path | length > 0
+      - not docker_freeradius.ldap.enabled | bool or docker_freeradius.ldap.ca_container_path is match('^/\\S+$')
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_freeradius.ldap.enabled | bool or docker_freeradius.ldap.bind_password | length >= 16
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.user_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not docker_freeradius.ldap.enabled | bool
+        or docker_freeradius.ldap.group_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_freeradius.ldap.enabled | bool or docker_freeradius.ldap.user_filter | length > 0
+      - not docker_freeradius.ldap.enabled | bool or docker_freeradius.ldap.network.external | bool
+      - not docker_freeradius.ldap.enabled | bool or docker_freeradius.ldap.network.name | length > 0
+    fail_msg: >-
+      docker_freeradius requires pinned Debian image inputs, explicit loopback or
+      deliberate published ports, at least one RADIUS client, and verified LDAP
+      settings when LDAP is enabled.
+  no_log: true
+
+- name: Validate FreeRADIUS clients
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.ipaddr | length > 0
+      - item.secret | length >= 16
+      - item.secret not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - item.require_message_authenticator | default('yes') in ['yes', 'no']
+      - >-
+        item.ipaddr not in ['0.0.0.0/0', '::/0']
+        or not docker_freeradius.publish | bool
+        or docker_freeradius.bind_address in ['127.0.0.1', '::1']
+    fail_msg: >-
+      Every FreeRADIUS client needs a stable name, explicit address or network,
+      and a strong shared secret. Wildcard clients are allowed only for
+      loopback-published lab endpoints.
+  loop: "{{ docker_freeradius.clients }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+  no_log: true
+
+- name: Ensure FreeRADIUS project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_freeradius.project_dir }}"
+      mode: "0750"
+    - path: "{{ docker_freeradius.project_dir }}/image"
+      mode: "0750"
+    - path: "{{ docker_freeradius.config_dir }}"
+      owner: root
+      group: "{{ docker_freeradius.run_gid }}"
+      mode: "0750"
+    - path: "{{ docker_freeradius.run_dir }}"
+      owner: "{{ docker_freeradius.run_uid }}"
+      group: "{{ docker_freeradius.run_gid }}"
+      mode: "0750"
+    - path: "{{ docker_freeradius.log_dir }}"
+      owner: "{{ docker_freeradius.run_uid }}"
+      group: "{{ docker_freeradius.run_gid }}"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Render FreeRADIUS image files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_freeradius.project_dir }}/image/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: Dockerfile.j2
+      dest: Dockerfile
+      mode: "0644"
+    - src: .dockerignore.j2
+      dest: .dockerignore
+      mode: "0644"
+  loop_control:
+    label: "{{ item.dest }}"
+  notify: Restart docker freeradius compose
+
+- name: Render FreeRADIUS configuration files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_freeradius.config_dir }}/{{ item.dest }}"
+    owner: root
+    group: "{{ docker_freeradius.run_gid }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - src: clients.conf.j2
+      dest: clients.conf
+      mode: "0640"
+    - src: default-site.j2
+      dest: default-site
+      mode: "0644"
+    - src: ldap.j2
+      dest: ldap
+      mode: "0640"
+  loop_control:
+    label: "{{ item.dest }}"
+  no_log: true
+  diff: false
+  notify: Restart docker freeradius compose
+
+- name: Render FreeRADIUS Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_freeradius.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart docker freeradius compose
+
+- name: Install FreeRADIUS Compose systemd unit
+  ansible.builtin.template:
+    src: docker-freeradius.service.j2
+    dest: /etc/systemd/system/docker-freeradius.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker freeradius compose
+
+- name: Enable FreeRADIUS Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-freeradius
+    enabled: true
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Start or update FreeRADIUS Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_freeradius.project_dir }}"
+    project_name: "{{ docker_freeradius.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_freeradius.docker_binary }}"
+    state: present
+    pull: "{{ docker_freeradius.pull_policy }}"
+    build: "{{ docker_freeradius.build }}"
+    recreate: "{{ docker_freeradius.recreate }}"
+    remove_orphans: "{{ docker_freeradius.remove_orphans | bool }}"
+    wait: "{{ docker_freeradius.wait | bool }}"
+    wait_timeout: "{{ docker_freeradius.wait_timeout }}"
+  when:
+    - docker_freeradius.apply | bool
+    - not ansible_check_mode

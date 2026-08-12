@@ -1,0 +1,67 @@
+---
+docker_tacacs_plus:  # noqa: var-naming[no-role-prefix]
+  project_name: tacacs-plus
+  project_dir: /opt/docker/tacacs-plus
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: never
+  build: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 120
+  restart: unless-stopped
+
+  image_name: tmnt/tacacs-plus:ng-debian
+  base_image: docker.io/library/debian:12-slim@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+  source:
+    repo: https://github.com/MarcJHuber/event-driven-servers.git
+    ref: bc14cb9b7f1694e0fb6881012bbc1d3e361a723e
+  run_uid: "10102"
+  run_gid: "10102"
+  timezone: UTC
+
+  bind_address: 127.0.0.1
+  container_port: 4949
+  published_port: 4949
+  publish: true
+
+  config_dir: /opt/docker/tacacs-plus/config
+  log_dir: /opt/docker/tacacs-plus/log
+
+  clients: []
+  local_users: []
+
+  ldap:
+    enabled: false
+    server_uri: ldaps://openldap:1636
+    start_tls: false
+    validate_certs: true
+    allow_plaintext: false
+    ca_path: ""
+    ca_container_path: /etc/ssl/certs/tmnt-openldap-ca.crt
+    bind_dn: ""
+    bind_password: ""
+    user_base_dn: ou=people,dc=example,dc=org
+    user_filter: "(&(objectClass=posixAccount)(uid=%s))"
+    group_base_dn: ou=groups,dc=example,dc=org
+    group_filter: "(&(objectClass=groupOfNames)(member=%s))"
+    memberof_regex: "^cn=([^,]+),.*"
+    memberof_filter: "^cn=tacacs-"
+    nested_group_depth: "3"
+    admin_group_cn: tacacs-admins
+    readonly_group_cn: tacacs-readonly
+    network:
+      name: tmnt_openldap
+      external: true
+
+  resources:
+    memory_limit: 256m
+    cpus: "0.5"
+    pids_limit: 128
+
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"

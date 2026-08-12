@@ -1,0 +1,22 @@
+FROM {{ docker_freeradius.base_image }}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      dumb-init \
+      freeradius \
+      freeradius-ldap \
+      freeradius-utils \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -f \
+      /etc/freeradius/3.0/mods-enabled/eap \
+      /etc/freeradius/3.0/sites-enabled/inner-tunnel \
+    && mkdir -p /run/freeradius /var/log/freeradius \
+    && chown -R freerad:freerad /run/freeradius /var/log/freeradius
+
+EXPOSE 1812/udp 1813/udp
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["/usr/sbin/freeradius", "-f", "-l", "stdout"]

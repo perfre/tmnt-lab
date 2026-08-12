@@ -15,6 +15,11 @@ networks:
   powerdns_api:
     external: {{ docker_poweradmin.powerdns_api.network.external | ternary('true', 'false') }}
     name: "{{ docker_poweradmin.powerdns_api.network.name }}"
+{% if docker_poweradmin.ldap.enabled | bool %}
+  ldap:
+    external: {{ docker_poweradmin.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_poweradmin.ldap.network.name }}"
+{% endif %}
 
 secrets:
   db_password:
@@ -25,6 +30,10 @@ secrets:
     file: ./secrets/admin-password
   session_key:
     file: ./secrets/session-key
+{% if docker_poweradmin.ldap.enabled | bool %}
+  ldap_bind_password:
+    file: ./secrets/ldap-bind-password
+{% endif %}
 
 services:
   poweradmin:
@@ -64,6 +73,32 @@ services:
       PA_LOCKOUT_ATTEMPTS: "{{ docker_poweradmin.security.lockout_attempts }}"
       PA_LOCKOUT_DURATION: "{{ docker_poweradmin.security.lockout_duration }}"
       PA_TIMEZONE: "{{ docker_poweradmin.timezone }}"
+{% if docker_poweradmin.ldap.enabled | bool %}
+      PA_LDAP_ENABLED: "true"
+      PA_LDAP_URI: "{{ docker_poweradmin.ldap.uri }}"
+      PA_LDAP_BASE_DN: "{{ docker_poweradmin.ldap.base_dn }}"
+      PA_LDAP_BIND_DN: "{{ docker_poweradmin.ldap.bind_dn }}"
+      PA_LDAP_BIND_PASSWORD__FILE: /run/secrets/ldap_bind_password
+      PA_LDAP_USER_ATTRIBUTE: "{{ docker_poweradmin.ldap.user_attribute }}"
+      PA_LDAP_SEARCH_FILTER: "{{ docker_poweradmin.ldap.search_filter }}"
+      PA_LDAP_PROTOCOL_VERSION: "{{ docker_poweradmin.ldap.protocol_version }}"
+      PA_LDAP_SYNC_USER_INFO: "{{ docker_poweradmin.ldap.sync_user_info | ternary('true', 'false') }}"
+      PA_LDAP_AUTO_PROVISION: "{{ docker_poweradmin.ldap.auto_provision | ternary('true', 'false') }}"
+      PA_LDAP_GROUPS_ATTRIBUTE: "{{ docker_poweradmin.ldap.groups_attribute }}"
+{% if docker_poweradmin.ldap.permission_template_mapping | length > 0 %}
+      PA_LDAP_PERMISSION_TEMPLATE_MAPPING: "{{ docker_poweradmin.ldap.permission_template_mapping }}"
+{% endif %}
+{% if docker_poweradmin.ldap.group_mapping | length > 0 %}
+      PA_LDAP_GROUP_MAPPING: "{{ docker_poweradmin.ldap.group_mapping }}"
+{% endif %}
+{% if docker_poweradmin.ldap.default_permission_template | length > 0 %}
+      PA_LDAP_DEFAULT_PERMISSION_TEMPLATE: "{{ docker_poweradmin.ldap.default_permission_template }}"
+{% endif %}
+{% if docker_poweradmin.ldap.validate_certs | bool %}
+      LDAPTLS_CACERT: "{{ docker_poweradmin.ldap.ca_container_path }}"
+      LDAPTLS_REQCERT: demand
+{% endif %}
+{% endif %}
       DNS_NS1: "{{ docker_poweradmin.dns.ns1 }}"
       DNS_NS2: "{{ docker_poweradmin.dns.ns2 }}"
       DNS_HOSTMASTER: "{{ docker_poweradmin.dns.hostmaster }}"
@@ -88,6 +123,13 @@ services:
         uid: "{{ docker_poweradmin.run_uid }}"
         gid: "{{ docker_poweradmin.run_gid }}"
         mode: 0440
+{% if docker_poweradmin.ldap.enabled | bool %}
+      - source: ldap_bind_password
+        target: ldap_bind_password
+        uid: "{{ docker_poweradmin.run_uid }}"
+        gid: "{{ docker_poweradmin.run_gid }}"
+        mode: 0440
+{% endif %}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:{{ docker_poweradmin.app_port }}/ >/dev/null"]
       start_period: 30s
@@ -98,6 +140,16 @@ services:
       - frontend
       - database
       - powerdns_api
+{% if docker_poweradmin.ldap.enabled | bool %}
+      - ldap
+{% endif %}
+{% if docker_poweradmin.ldap.enabled | bool and docker_poweradmin.ldap.validate_certs | bool %}
+    volumes:
+      - type: bind
+        source: "{{ docker_poweradmin.ldap.ca_path }}"
+        target: "{{ docker_poweradmin.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m,uid={{ docker_poweradmin.run_uid }},gid={{ docker_poweradmin.run_gid }}
       - /app/config:rw,noexec,nosuid,size=16m,uid={{ docker_poweradmin.run_uid }},gid={{ docker_poweradmin.run_gid }}

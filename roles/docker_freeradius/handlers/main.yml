@@ -1,0 +1,9 @@
+---
+- name: Restart docker freeradius compose
+  ansible.builtin.systemd:
+    name: docker-freeradius
+    state: restarted
+    daemon_reload: true
+  when:
+    - docker_freeradius.apply | bool
+    - not ansible_check_mode

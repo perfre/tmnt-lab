@@ -16,12 +16,39 @@ docker_netbox:  # noqa: var-naming[no-role-prefix]
 
   timezone: Europe/Stockholm
   allowed_hosts:
-    - "*"
+    - netbox.example.invalid
   csrf_trusted_origins: []
 
   web:
     hostname: netbox
     http_port: 8001
+
+  ldap:
+    enabled: false
+    server_uri: ldaps://openldap:1636
+    start_tls: false
+    validate_certs: true
+    allow_plaintext: false
+    ca_path: ""
+    ca_container_path: /etc/ssl/certs/tmnt-openldap-ca.crt
+    bind_dn: ""
+    bind_password: ""
+    user_search_base_dn: ou=people,dc=example,dc=org
+    user_search_attr: uid
+    group_search_base_dn: ou=groups,dc=example,dc=org
+    group_search_class: groupOfNames
+    group_type: GroupOfNamesType
+    require_group_dn: ""
+    admin_group_dn: ""
+    superuser_group_dn: ""
+    attr_first_name: givenName
+    attr_last_name: sn
+    attr_email: mail
+    cache_timeout: "300"
+    mirror_groups: "true"
+    network:
+      name: tmnt_openldap
+      external: true
 
   data_dirs:
     config: /opt/docker/netbox/config
@@ -44,14 +71,14 @@ docker_netbox:  # noqa: var-naming[no-role-prefix]
       external: true
 
   redis:
-    password: netbox-redis
+    password: ""
     database: "0"
-    cache_password: netbox-redis-cache
+    cache_password: ""
     cache_database: "1"
 
   security:
-    secret_key: "change-me-change-me-change-me-change-me-change-me-change-me"
-    api_token_pepper_1: "change-me-api-token-pepper-change-me-api-token-pepper"
+    secret_key: ""
+    api_token_pepper_1: ""
 
   email:
     server: localhost
@@ -75,7 +102,7 @@ docker_netbox:  # noqa: var-naming[no-role-prefix]
     enabled: false
     name: admin
     email: admin@example.invalid
-    password: admin
+    password: ""
     api_token: ""
 
   services:

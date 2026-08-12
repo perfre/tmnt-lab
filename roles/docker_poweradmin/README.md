@@ -28,6 +28,12 @@ docker_poweradmin:
   powerdns_api:
     url: http://powerdns:8081
     key: LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE
+  ldap:
+    enabled: true
+    uri: ldaps://openldap:1636
+    ca_path: /opt/docker/openldap/pki/ca.crt
+    bind_dn: cn=poweradmin,ou=services,dc=tmnt,dc=localhost
+    bind_password: LAB_ONLY_POWERADMIN_LDAP_BIND_PASSWORD_DO_NOT_REUSE
 ```
 
 Poweradmin initializes its own tables and the PowerDNS schema in the shared `powerdns` lab database on first startup. The database is intentionally shared in this disposable lab because the current repository has no production schema-migration role for PowerDNS yet.
@@ -40,6 +46,8 @@ Poweradmin initializes its own tables and the PowerDNS schema in the shared `pow
 - Persistent application state: shared MariaDB database `powerdns`
 
 Secrets are written below `/opt/docker/poweradmin/secrets` as `root:82` mode `0640` so the non-root container can read file-backed Compose secrets through `*_FILE` environment variables. The PowerDNS API connection is plaintext but stays on the internal `tmnt_powerdns_api` network and requires the synthetic API key.
+
+When LDAP is enabled, Poweradmin joins the external LDAP network, mounts the OpenLDAP CA read-only, and reads the LDAP bind password from a Compose secret. LDAP must use verified LDAPS unless inventory explicitly permits plaintext for an isolated test fixture.
 
 The Poweradmin app container stays on internal Docker networks only. When `web.publish` is `true`, only the Nginx TLS proxy joins a project-scoped non-internal `ingress` bridge so Docker can bind the loopback host port.
 

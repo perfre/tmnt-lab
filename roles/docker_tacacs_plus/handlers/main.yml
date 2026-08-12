@@ -1,0 +1,9 @@
+---
+- name: Restart docker tacacs plus compose
+  ansible.builtin.systemd:
+    name: docker-tacacs-plus
+    state: restarted
+    daemon_reload: true
+  when:
+    - docker_tacacs_plus.apply | bool
+    - not ansible_check_mode

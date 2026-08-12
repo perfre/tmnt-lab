@@ -1,0 +1,59 @@
+FROM {{ docker_tacacs_plus.base_image }} AS build
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG TAC_PLUS_NG_REPO={{ docker_tacacs_plus.source.repo }}
+ARG TAC_PLUS_NG_REF={{ docker_tacacs_plus.source.ref }}
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      clang \
+      git \
+      libc-ares-dev \
+      libldap2-dev \
+      libpcre2-dev \
+      libssl-dev \
+      make \
+      perl \
+      zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git init /src \
+    && cd /src \
+    && git remote add origin "$TAC_PLUS_NG_REPO" \
+    && git fetch --depth 1 origin "$TAC_PLUS_NG_REF" \
+    && git checkout --detach "$TAC_PLUS_NG_REF" \
+    && ./configure --prefix=/usr/local --without-doc tac_plus-ng mavis spawnd tactester \
+    && make -j"$(nproc)" \
+    && make install INSTALLROOT=/out
+
+FROM {{ docker_tacacs_plus.base_image }}
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      dumb-init \
+      libc-ares2 \
+      libio-socket-ssl-perl \
+      libldap-2.5-0 \
+      libnet-ldap-perl \
+      libpcre2-8-0 \
+      libssl3 \
+      netcat-openbsd \
+      perl \
+      zlib1g \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid {{ docker_tacacs_plus.run_gid }} tacacs \
+    && useradd --uid {{ docker_tacacs_plus.run_uid }} --gid {{ docker_tacacs_plus.run_gid }} \
+      --home-dir /nonexistent --shell /usr/sbin/nologin --no-create-home tacacs \
+    && install -d -o {{ docker_tacacs_plus.run_uid }} -g {{ docker_tacacs_plus.run_gid }} -m 0750 /var/log/tacacs-plus
+
+COPY --from=build /out/usr/local /usr/local
+
+USER {{ docker_tacacs_plus.run_uid }}:{{ docker_tacacs_plus.run_gid }}
+EXPOSE {{ docker_tacacs_plus.container_port }}/tcp
+
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
+CMD ["/usr/local/sbin/tac_plus-ng", "/etc/tacacs-plus/tac_plus-ng.cfg"]

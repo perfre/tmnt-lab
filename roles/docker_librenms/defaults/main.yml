@@ -34,6 +34,15 @@ docker_librenms:  # noqa: var-naming[no-role-prefix]
     hostname: librenms
     http_port: 8000
 
+  ldap:
+    enabled: false
+    validate_certs: true
+    ca_path: ""
+    ca_container_path: /opt/librenms/ldap-ca-cert
+    network:
+      name: tmnt_openldap
+      external: true
+
   capabilities:
     - NET_ADMIN
     - NET_RAW

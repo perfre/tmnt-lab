@@ -1,0 +1,127 @@
+---
+- name: Validate ops_zabbix_ldap configuration
+  ansible.builtin.assert:
+    that:
+      - ops_zabbix_ldap is mapping
+      - ops_zabbix_ldap.apply is boolean
+      - ops_zabbix_ldap.enabled is boolean
+      - ops_zabbix_ldap.api.host | length > 0
+      - ops_zabbix_ldap.api.port | int > 0
+      - ops_zabbix_ldap.api.port | int <= 65535
+      - ops_zabbix_ldap.api.use_ssl is boolean
+      - ops_zabbix_ldap.api.validate_certs is boolean
+      - ops_zabbix_ldap.api.allow_plaintext is boolean
+      - ops_zabbix_ldap.api.use_ssl | bool or ops_zabbix_ldap.api.allow_plaintext | bool
+      - not ops_zabbix_ldap.api.use_ssl | bool or ops_zabbix_ldap.api.validate_certs | bool
+      - >-
+        not (ops_zabbix_ldap.apply | bool and ops_zabbix_ldap.enabled | bool)
+        or (ops_zabbix_ldap.api.token | length > 0)
+        or (ops_zabbix_ldap.api.username | length > 0 and ops_zabbix_ldap.api.password | length >= 16)
+      - >-
+        not (ops_zabbix_ldap.apply | bool and ops_zabbix_ldap.enabled | bool)
+        or ops_zabbix_ldap.api.password not in ['password', 'changeme', 'CHANGE_ME', 'admin', 'zabbix']
+      - not ops_zabbix_ldap.enabled | bool or ops_zabbix_ldap.user_directory.name | length > 0
+      - not ops_zabbix_ldap.enabled | bool or ops_zabbix_ldap.user_directory.host is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - >-
+        not ops_zabbix_ldap.enabled | bool
+        or ops_zabbix_ldap.user_directory.host is match('^ldaps://')
+        or ops_zabbix_ldap.user_directory.start_tls | int == 1
+      - not ops_zabbix_ldap.enabled | bool or ops_zabbix_ldap.user_directory.port | int > 0
+      - not ops_zabbix_ldap.enabled | bool or ops_zabbix_ldap.user_directory.port | int <= 65535
+      - >-
+        not ops_zabbix_ldap.enabled | bool
+        or ops_zabbix_ldap.user_directory.base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not ops_zabbix_ldap.enabled | bool
+        or ops_zabbix_ldap.user_directory.group_basedn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_zabbix_ldap.enabled | bool or ops_zabbix_ldap.user_directory.search_attribute | length > 0
+      - >-
+        not ops_zabbix_ldap.enabled | bool
+        or ops_zabbix_ldap.user_directory.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_zabbix_ldap.enabled | bool or ops_zabbix_ldap.user_directory.bind_password | length >= 16
+      - >-
+        not ops_zabbix_ldap.enabled | bool
+        or ops_zabbix_ldap.user_directory.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - ops_zabbix_ldap.user_groups is sequence
+      - ops_zabbix_ldap.user_directory.provision_groups is sequence
+      - ops_zabbix_ldap.user_directory.provision_media is sequence
+    fail_msg: >-
+      ops_zabbix_ldap requires a deliberate Zabbix API endpoint and credentials;
+      enabling LDAP also requires a verified directory URI, bind account, search
+      DNs, and provisioning/group settings.
+  no_log: true
+
+- name: Reconcile Zabbix LDAP user groups
+  vars: &zabbix_httpapi_vars
+    ansible_network_os: community.zabbix.zabbix
+    ansible_connection: httpapi
+    ansible_host: "{{ ops_zabbix_ldap.api.host }}"
+    ansible_httpapi_port: "{{ ops_zabbix_ldap.api.port }}"
+    ansible_httpapi_use_ssl: "{{ ops_zabbix_ldap.api.use_ssl | bool }}"
+    ansible_httpapi_validate_certs: "{{ ops_zabbix_ldap.api.validate_certs | bool }}"
+    ansible_zabbix_url_path: "{{ ops_zabbix_ldap.api.url_path }}"
+    ansible_user: "{{ ops_zabbix_ldap.api.username }}"
+    ansible_httpapi_pass: "{{ ops_zabbix_ldap.api.password }}"
+    ansible_zabbix_auth_key: "{{ ops_zabbix_ldap.api.token | default(omit, true) }}"
+  community.zabbix.zabbix_usergroup:
+    name: "{{ item.name }}"
+    gui_access: "{{ item.gui_access | default('default') }}"
+    status: "{{ item.status | default('enabled') }}"
+    userdirectory: "{{ (item.gui_access | default('default') == 'LDAP') | ternary(ops_zabbix_ldap.user_directory.name, omit) }}"
+    state: "{{ item.state | default('present') }}"
+  loop: "{{ ops_zabbix_ldap.user_groups }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - ops_zabbix_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_zabbix_ldap.enabled | bool
+  no_log: true
+
+- name: Reconcile Zabbix LDAP user directory
+  vars: *zabbix_httpapi_vars
+  community.zabbix.zabbix_user_directory:
+    state: present
+    name: "{{ ops_zabbix_ldap.user_directory.name }}"
+    idp_type: ldap
+    host: "{{ ops_zabbix_ldap.user_directory.host }}"
+    port: "{{ ops_zabbix_ldap.user_directory.port }}"
+    start_tls: "{{ ops_zabbix_ldap.user_directory.start_tls | int }}"
+    base_dn: "{{ ops_zabbix_ldap.user_directory.base_dn }}"
+    search_attribute: "{{ ops_zabbix_ldap.user_directory.search_attribute }}"
+    search_filter: "{{ ops_zabbix_ldap.user_directory.search_filter }}"
+    bind_dn: "{{ ops_zabbix_ldap.user_directory.bind_dn }}"
+    bind_password: "{{ ops_zabbix_ldap.user_directory.bind_password }}"
+    description: "{{ ops_zabbix_ldap.user_directory.description }}"
+    group_basedn: "{{ ops_zabbix_ldap.user_directory.group_basedn }}"
+    group_filter: "{{ ops_zabbix_ldap.user_directory.group_filter }}"
+    group_member: "{{ ops_zabbix_ldap.user_directory.group_member }}"
+    group_membership: "{{ ops_zabbix_ldap.user_directory.group_membership }}"
+    group_name: "{{ ops_zabbix_ldap.user_directory.group_name }}"
+    user_ref_attr: "{{ ops_zabbix_ldap.user_directory.user_ref_attr }}"
+    user_username: "{{ ops_zabbix_ldap.user_directory.user_username }}"
+    user_lastname: "{{ ops_zabbix_ldap.user_directory.user_lastname }}"
+    provision_status: "{{ ops_zabbix_ldap.user_directory.provision_status | bool }}"
+    provision_groups: "{{ ops_zabbix_ldap.user_directory.provision_groups }}"
+    provision_media: "{{ ops_zabbix_ldap.user_directory.provision_media }}"
+  when:
+    - ops_zabbix_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_zabbix_ldap.enabled | bool
+  no_log: true
+
+- name: Reconcile Zabbix authentication settings
+  vars: *zabbix_httpapi_vars
+  community.zabbix.zabbix_authentication:
+    authentication_type: "{{ ops_zabbix_ldap.authentication.authentication_type }}"
+    ldap_auth_enabled: "{{ ops_zabbix_ldap.authentication.ldap_auth_enabled | bool }}"
+    ldap_userdirectory: "{{ ops_zabbix_ldap.user_directory.name }}"
+    ldap_case_sensitive: "{{ ops_zabbix_ldap.authentication.ldap_case_sensitive | bool }}"
+    ldap_jit_status: "{{ ops_zabbix_ldap.authentication.ldap_jit_status | bool }}"
+    jit_provision_interval: "{{ ops_zabbix_ldap.authentication.jit_provision_interval }}"
+    disabled_usrgroup: "{{ ops_zabbix_ldap.authentication.disabled_user_group }}"
+  when:
+    - ops_zabbix_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_zabbix_ldap.enabled | bool
+  no_log: true

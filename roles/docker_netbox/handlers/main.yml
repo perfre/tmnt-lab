@@ -4,3 +4,6 @@
     name: docker-netbox
     state: restarted
     daemon_reload: true
+  when:
+    - docker_netbox.apply | bool
+    - not ansible_check_mode

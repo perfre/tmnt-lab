@@ -44,6 +44,8 @@ Published ports are disabled by default. Set `ldap.publish` or `ldaps.publish` i
 
 OpenLDAP terminates TLS directly. Health checks use LDAPS with CA validation. The container runs directly as Debian's `openldap` user (`100:101`), drops all Linux capabilities, uses `no-new-privileges`, and has a read-only root filesystem. Ansible prepares the writable data and runtime directories with the required ownership before Compose starts the service.
 
+Directory reads require an authenticated bind when anonymous reads are disabled. The `memberOf` overlay attribute is readable to authenticated service accounts so application roles can evaluate LDAP group membership without anonymous directory access.
+
 The generated CA is local deployment material. For production, either replace it with inventory-provided certificate paths from your PKI or treat the generated CA as target-local trust material and distribute only its public certificate deliberately.
 
 ## Deployment

@@ -10,7 +10,14 @@
       - docker_librenms.database.password | length > 0
       - docker_librenms.database.network.external | bool
       - docker_librenms.database.network.name | length > 0
-    fail_msg: "docker_librenms requires a project directory and a complete external MariaDB connection."
+      - docker_librenms.ldap.enabled is boolean
+      - not docker_librenms.ldap.enabled | bool or not docker_librenms.ldap.validate_certs | bool or docker_librenms.ldap.ca_path | length > 0
+      - not docker_librenms.ldap.enabled | bool or not docker_librenms.ldap.validate_certs | bool or docker_librenms.ldap.ca_container_path is match('^/\\S+$')
+      - not docker_librenms.ldap.enabled | bool or docker_librenms.ldap.network.external | bool
+      - not docker_librenms.ldap.enabled | bool or docker_librenms.ldap.network.name | length > 0
+    fail_msg: >-
+      docker_librenms requires a project directory, complete external MariaDB
+      connection, and when LDAP is enabled a CA path and external LDAP network.
 
 - name: Ensure LibreNMS project directories exist
   ansible.builtin.file:
@@ -64,6 +71,7 @@
     name: docker-librenms
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Start or update LibreNMS Compose project
   community.docker.docker_compose_v2:
@@ -78,4 +86,6 @@
     remove_orphans: "{{ docker_librenms.remove_orphans | bool }}"
     wait: "{{ docker_librenms.wait | bool }}"
     wait_timeout: "{{ docker_librenms.wait_timeout | default(omit, true) }}"
-  when: docker_librenms.apply | bool
+  when:
+    - docker_librenms.apply | bool
+    - not ansible_check_mode

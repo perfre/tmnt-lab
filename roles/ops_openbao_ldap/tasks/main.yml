@@ -1,0 +1,134 @@
+---
+- name: Validate ops_openbao_ldap configuration
+  ansible.builtin.assert:
+    that:
+      - ops_openbao_ldap is mapping
+      - ops_openbao_ldap.apply is boolean
+      - ops_openbao_ldap.enabled is boolean
+      - ops_openbao_ldap.project_dir is match('^/\\S+$')
+      - ops_openbao_ldap.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - ops_openbao_ldap.service | length > 0
+      - ops_openbao_ldap.mount_path is match('^[A-Za-z0-9_.-]+$')
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.token | length >= 16
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.url is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.url is match('^ldaps://') or ops_openbao_ldap.ldap.start_tls | bool
+      - not ops_openbao_ldap.enabled | bool or not ops_openbao_ldap.ldap.insecure_tls | bool
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.certificate_container_path is match('^/\\S+$')
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.bind_password | length >= 16
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.user_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.group_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.user_attr | length > 0
+      - not ops_openbao_ldap.enabled | bool or ops_openbao_ldap.ldap.group_attr | length > 0
+      - ops_openbao_ldap.groups is sequence
+    fail_msg: >-
+      ops_openbao_ldap requires an initialized/unsealed OpenBao container,
+      operator token, verified LDAP URL, bind account, search DNs, and group
+      mapping. It never permits insecure TLS.
+  no_log: true
+
+- name: Inspect OpenBao auth methods
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ ops_openbao_ldap.project_dir }}"
+    project_name: "{{ ops_openbao_ldap.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ ops_openbao_ldap.docker_binary }}"
+    service: "{{ ops_openbao_ldap.service }}"
+    env:
+      BAO_TOKEN: "{{ ops_openbao_ldap.token }}"
+    argv:
+      - bao
+      - auth
+      - list
+      - -format=json
+  register: ops_openbao_ldap_auth_list
+  changed_when: false
+  when:
+    - ops_openbao_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_openbao_ldap.enabled | bool
+  no_log: true
+
+- name: Enable OpenBao LDAP auth method
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ ops_openbao_ldap.project_dir }}"
+    project_name: "{{ ops_openbao_ldap.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ ops_openbao_ldap.docker_binary }}"
+    service: "{{ ops_openbao_ldap.service }}"
+    env:
+      BAO_TOKEN: "{{ ops_openbao_ldap.token }}"
+    argv:
+      - bao
+      - auth
+      - enable
+      - -path={{ ops_openbao_ldap.mount_path }}
+      - ldap
+  when:
+    - ops_openbao_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_openbao_ldap.enabled | bool
+    - (ops_openbao_ldap_auth_list.stdout | default('{}') | from_json)[ops_openbao_ldap.mount_path ~ '/'] is not defined
+  no_log: true
+
+- name: Configure OpenBao LDAP auth method
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ ops_openbao_ldap.project_dir }}"
+    project_name: "{{ ops_openbao_ldap.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ ops_openbao_ldap.docker_binary }}"
+    service: "{{ ops_openbao_ldap.service }}"
+    env:
+      BAO_TOKEN: "{{ ops_openbao_ldap.token }}"
+    argv:
+      - bao
+      - write
+      - auth/{{ ops_openbao_ldap.mount_path }}/config
+      - url={{ ops_openbao_ldap.ldap.url }}
+      - starttls={{ ops_openbao_ldap.ldap.start_tls | ternary('true', 'false') }}
+      - insecure_tls=false
+      - certificate=@{{ ops_openbao_ldap.ldap.certificate_container_path }}
+      - binddn={{ ops_openbao_ldap.ldap.bind_dn }}
+      - bindpass={{ ops_openbao_ldap.ldap.bind_password }}
+      - userdn={{ ops_openbao_ldap.ldap.user_dn }}
+      - userattr={{ ops_openbao_ldap.ldap.user_attr }}
+      - groupdn={{ ops_openbao_ldap.ldap.group_dn }}
+      - groupfilter={{ ops_openbao_ldap.ldap.group_filter }}
+      - groupattr={{ ops_openbao_ldap.ldap.group_attr }}
+      - discoverdn={{ ops_openbao_ldap.ldap.discover_dn | ternary('true', 'false') }}
+      - deny_null_bind={{ ops_openbao_ldap.ldap.deny_null_bind | ternary('true', 'false') }}
+      - case_sensitive_names={{ ops_openbao_ldap.ldap.case_sensitive_names | ternary('true', 'false') }}
+      - username_as_alias={{ ops_openbao_ldap.ldap.username_as_alias | ternary('true', 'false') }}
+  when:
+    - ops_openbao_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_openbao_ldap.enabled | bool
+  no_log: true
+
+- name: Configure OpenBao LDAP group policy mappings
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ ops_openbao_ldap.project_dir }}"
+    project_name: "{{ ops_openbao_ldap.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ ops_openbao_ldap.docker_binary }}"
+    service: "{{ ops_openbao_ldap.service }}"
+    env:
+      BAO_TOKEN: "{{ ops_openbao_ldap.token }}"
+    argv:
+      - bao
+      - write
+      - auth/{{ ops_openbao_ldap.mount_path }}/groups/{{ item.name }}
+      - policies={{ item.policies | join(',') }}
+  loop: "{{ ops_openbao_ldap.groups }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - ops_openbao_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_openbao_ldap.enabled | bool
+  no_log: true

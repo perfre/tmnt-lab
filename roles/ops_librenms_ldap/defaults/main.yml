@@ -1,0 +1,25 @@
+---
+ops_librenms_ldap:  # noqa: var-naming[no-role-prefix]
+  apply: true
+  docker_binary: /usr/bin/docker
+  project_dir: /opt/docker/librenms
+  project_name: librenms
+  service: librenms
+  enabled: false
+  server_uri: ldaps://openldap:1636
+  allow_plaintext: false
+  validate_certs: true
+  ca_container_path: /opt/librenms/ldap-ca-cert
+  bind_dn: ""
+  bind_password: ""
+  base_dn: ou=people,dc=example,dc=org
+  user_filter: "(&(objectClass=posixAccount)(uid=%u))"
+  group_base_dn: ou=groups,dc=example,dc=org
+  group_member_attr: memberUid
+  group_member_type: username
+  admin_group_cn: ""
+  uid_attr: uid
+  name_attr: cn
+  email_attr: mail
+  timeout: "5"
+  debug: false

@@ -35,14 +35,11 @@ ops_openldap:
     - cn: admins
       attributes:
         cn: admins
-        gidNumber: "10000"
         member:
           - uid=alice,ou=people,dc=example,dc=org
-        memberUid:
-          - alice
 ```
 
-Users and groups accept either a full `dn` or a default `uid=<uid>,<users_ou_dn>` / `cn=<cn>,<groups_ou_dn>` DN. User passwords can be provided as `password_hash`, or as `password` plus a deterministic `password_hash_salt`. Secret-bearing tasks are redacted.
+Users and groups accept either a full `dn` or a default `uid=<uid>,<users_ou_dn>` / `cn=<cn>,<groups_ou_dn>` DN. Users and `extra_entries` can set passwords as `password_hash`, or as `password` plus a deterministic `password_hash_salt`. The committed lab inventory uses `extra_entries` under `ou=services` for least-privilege application bind accounts. Secret-bearing tasks are redacted.
 
 ## Security
 

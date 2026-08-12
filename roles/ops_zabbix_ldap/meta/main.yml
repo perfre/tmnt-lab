@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: ops_zabbix_ldap
+  author: tmnt-lab
+  description: Reconcile Zabbix LDAP user directory and authentication settings through the Zabbix API.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

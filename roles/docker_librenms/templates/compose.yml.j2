@@ -5,6 +5,11 @@ networks:
   database:
     external: {{ docker_librenms.database.network.external | ternary('true', 'false') }}
     name: "{{ docker_librenms.database.network.name }}"
+{% if docker_librenms.ldap.enabled | bool %}
+  ldap:
+    external: {{ docker_librenms.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_librenms.ldap.network.name }}"
+{% endif %}
 
 services:
   redis:
@@ -54,13 +59,26 @@ services:
       DB_USER: "{{ docker_librenms.database.user }}"
       DB_PASSWORD: "{{ docker_librenms.database.password }}"
       DB_TIMEOUT: "60"
+{% if docker_librenms.ldap.enabled | bool and docker_librenms.ldap.validate_certs | bool %}
+      LDAPTLS_CACERT: "{{ docker_librenms.ldap.ca_container_path }}"
+      LDAPTLS_REQCERT: demand
+{% endif %}
     volumes: &librenms-volumes
       - type: bind
         source: "{{ docker_librenms.data_dir }}"
         target: /data
+{% if docker_librenms.ldap.enabled | bool and docker_librenms.ldap.validate_certs | bool %}
+      - type: bind
+        source: "{{ docker_librenms.ldap.ca_path }}"
+        target: "{{ docker_librenms.ldap.ca_container_path }}"
+        read_only: true
+{% endif %}
     networks: &librenms-networks
       - default
       - database
+{% if docker_librenms.ldap.enabled | bool %}
+      - ldap
+{% endif %}
 
 {% if docker_librenms.services.dispatcher | bool %}
   dispatcher:

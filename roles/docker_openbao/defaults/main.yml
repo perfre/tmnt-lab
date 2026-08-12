@@ -20,6 +20,14 @@ docker_openbao:  # noqa: var-naming[no-role-prefix]
   env:
     BAO_ADDR: http://127.0.0.1:8200
 
+  ldap:
+    enabled: false
+    ca_path: ""
+    ca_container_path: /bao/config/ldap-ca.crt
+    network:
+      name: tmnt_openldap
+      external: true
+
   data_dir: /opt/docker/openbao/data
   config_dir: /opt/docker/openbao/config
 

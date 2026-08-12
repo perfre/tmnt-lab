@@ -1,0 +1,9 @@
+{% for client in docker_freeradius.clients %}
+client {{ client.name }} {
+	ipaddr = {{ client.ipaddr }}
+	secret = {{ client.secret | to_json }}
+	require_message_authenticator = {{ client.require_message_authenticator | default('yes') }}
+	nas_type = {{ client.nas_type | default('other') }}
+}
+
+{% endfor %}

@@ -4,3 +4,6 @@
     name: docker-librenms
     state: restarted
     daemon_reload: true
+  when:
+    - docker_librenms.apply | bool
+    - not ansible_check_mode

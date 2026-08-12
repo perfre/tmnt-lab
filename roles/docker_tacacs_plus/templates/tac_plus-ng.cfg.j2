@@ -1,0 +1,93 @@
+id = spawnd {
+	listen = { port = {{ docker_tacacs_plus.container_port }} }
+	spawn = {
+		instances min = 1
+		instances max = 8
+	}
+	background = no
+}
+
+id = tac_plus-ng {
+{% if docker_tacacs_plus.ldap.enabled | bool %}
+	mavis module = external {
+		setenv LDAP_HOSTS = {{ docker_tacacs_plus.ldap.server_uri | to_json }}
+		setenv LDAP_BASE = {{ docker_tacacs_plus.ldap.user_base_dn | to_json }}
+		setenv LDAP_BASE_GROUP = {{ docker_tacacs_plus.ldap.group_base_dn | to_json }}
+		setenv LDAP_FILTER = {{ docker_tacacs_plus.ldap.user_filter | to_json }}
+		setenv LDAP_FILTER_GROUP = {{ docker_tacacs_plus.ldap.group_filter | to_json }}
+		setenv LDAP_USER = {{ docker_tacacs_plus.ldap.bind_dn | to_json }}
+		setenv LDAP_PASSWD = {{ docker_tacacs_plus.ldap.bind_password | to_json }}
+		setenv LDAP_MEMBEROF_REGEX = {{ docker_tacacs_plus.ldap.memberof_regex | to_json }}
+		setenv LDAP_MEMBEROF_FILTER = {{ docker_tacacs_plus.ldap.memberof_filter | to_json }}
+		setenv LDAP_NESTED_GROUP_DEPTH = {{ docker_tacacs_plus.ldap.nested_group_depth | to_json }}
+		setenv LDAP_SKIP_POSIXGROUP = "1"
+{% if docker_tacacs_plus.ldap.start_tls | bool %}
+		setenv USE_STARTTLS = "1"
+{% endif %}
+{% if docker_tacacs_plus.ldap.validate_certs | bool %}
+		setenv TLS_OPTIONS = "verify => 'require', cafile => '{{ docker_tacacs_plus.ldap.ca_container_path }}'"
+{% endif %}
+		exec = /usr/local/lib/mavis/mavis_tacplus-ng_ldap.pl
+	}
+
+	login backend = mavis
+	user backend = mavis
+	pap backend = mavis
+{% endif %}
+
+{% for client in docker_tacacs_plus.clients %}
+device {{ client.name }} {
+	address = {{ client.address }}
+	welcome banner = {{ client.welcome_banner | default('Authorized access only\\n') | to_json }}
+	key = {{ client.key | to_json }}
+}
+{% endfor %}
+
+	profile admin {
+		script {
+			if (service == shell) {
+				if (cmd == "")
+					set priv-lvl = 15
+				permit
+			}
+		}
+	}
+
+	profile readonly {
+		enable = deny
+		script {
+			if (service == shell) {
+				if (cmd == "")
+					set priv-lvl = 1
+				permit
+			}
+		}
+	}
+
+	group admin
+	group readonly
+
+{% for user in docker_tacacs_plus.local_users %}
+user {{ user.name }} {
+	password login = clear {{ user.password | to_json }}
+	member = {{ user.group | default('readonly') }}
+}
+{% endfor %}
+
+	ruleset {
+{% if docker_tacacs_plus.ldap.enabled | bool %}
+		rule {
+			script {
+				if (memberof =~ /^cn={{ docker_tacacs_plus.ldap.admin_group_cn }},/) { profile = admin permit }
+				if (memberof =~ /^cn={{ docker_tacacs_plus.ldap.readonly_group_cn }},/) { profile = readonly permit }
+			}
+		}
+{% endif %}
+		rule {
+			script {
+				if (member == admin) { profile = admin permit }
+				if (member == readonly) { profile = readonly permit }
+			}
+		}
+	}
+}

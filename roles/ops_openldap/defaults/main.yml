@@ -54,7 +54,6 @@ ops_openldap:  # noqa: var-naming[no-role-prefix]
     object_classes:
       - top
       - groupOfNames
-      - posixGroup
 
   extra_entries: []
   users: []

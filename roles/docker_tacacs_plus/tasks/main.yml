@@ -1,0 +1,200 @@
+---
+- name: Validate docker_tacacs_plus configuration
+  ansible.builtin.assert:
+    that:
+      - docker_tacacs_plus is mapping
+      - docker_tacacs_plus.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_tacacs_plus.project_dir is match('^/\\S+$')
+      - docker_tacacs_plus.config_dir is match('^/\\S+$')
+      - docker_tacacs_plus.log_dir is match('^/\\S+$')
+      - docker_tacacs_plus.image_name is not search(':latest$')
+      - docker_tacacs_plus.base_image is search('@sha256:[0-9a-f]{64}$')
+      - docker_tacacs_plus.source.repo is match('^https://')
+      - docker_tacacs_plus.source.ref is match('^[0-9a-f]{40}$')
+      - docker_tacacs_plus.run_uid | int >= 10000
+      - docker_tacacs_plus.run_gid | int >= 10000
+      - docker_tacacs_plus.container_port | int >= 1024
+      - docker_tacacs_plus.container_port | int <= 65535
+      - not docker_tacacs_plus.publish | bool or docker_tacacs_plus.bind_address | length > 0
+      - not docker_tacacs_plus.publish | bool or docker_tacacs_plus.published_port | int > 0
+      - not docker_tacacs_plus.publish | bool or docker_tacacs_plus.published_port | int <= 65535
+      - docker_tacacs_plus.clients is sequence
+      - docker_tacacs_plus.clients | length > 0
+      - docker_tacacs_plus.ldap.enabled | bool or docker_tacacs_plus.local_users | length > 0
+      - docker_tacacs_plus.ldap.enabled is boolean
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or docker_tacacs_plus.ldap.server_uri is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or docker_tacacs_plus.ldap.server_uri is match('^ldaps://')
+        or docker_tacacs_plus.ldap.start_tls | bool
+        or docker_tacacs_plus.ldap.allow_plaintext | bool
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or not (
+          docker_tacacs_plus.ldap.server_uri is match('^ldaps://')
+          or docker_tacacs_plus.ldap.start_tls | bool
+        )
+        or docker_tacacs_plus.ldap.validate_certs | bool
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or not docker_tacacs_plus.ldap.validate_certs | bool
+        or docker_tacacs_plus.ldap.ca_path | length > 0
+      - not docker_tacacs_plus.ldap.enabled | bool or docker_tacacs_plus.ldap.ca_container_path is match('^/\\S+$')
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or docker_tacacs_plus.ldap.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_tacacs_plus.ldap.enabled | bool or docker_tacacs_plus.ldap.bind_password | length >= 16
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or docker_tacacs_plus.ldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or docker_tacacs_plus.ldap.user_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - >-
+        not docker_tacacs_plus.ldap.enabled | bool
+        or docker_tacacs_plus.ldap.group_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not docker_tacacs_plus.ldap.enabled | bool or docker_tacacs_plus.ldap.network.external | bool
+      - not docker_tacacs_plus.ldap.enabled | bool or docker_tacacs_plus.ldap.network.name | length > 0
+    fail_msg: >-
+      docker_tacacs_plus requires pinned Debian/source inputs, explicit clients,
+      an unprivileged TACACS+ port, and either local users or a verified LDAP
+      backend.
+  no_log: true
+
+- name: Validate TACACS+ clients
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.address | length > 0
+      - item.key | length >= 16
+      - item.key not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - >-
+        item.address not in ['0.0.0.0/0', '::/0']
+        or not docker_tacacs_plus.publish | bool
+        or docker_tacacs_plus.bind_address in ['127.0.0.1', '::1']
+    fail_msg: >-
+      Every TACACS+ client needs a stable name, explicit address or network, and
+      a strong shared key. Wildcard clients are allowed only for loopback lab
+      endpoints.
+  loop: "{{ docker_tacacs_plus.clients }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+  no_log: true
+
+- name: Validate TACACS+ local users
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[A-Za-z0-9_.-]+$')
+      - item.password | length >= 16
+      - item.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - item.group | default('readonly') in ['admin', 'readonly']
+    fail_msg: >-
+      Every local TACACS+ fallback user needs a stable name, strong password,
+      and an allowed privilege group.
+  loop: "{{ docker_tacacs_plus.local_users }}"
+  loop_control:
+    label: "{{ item.name | default('undefined') }}"
+  no_log: true
+
+- name: Ensure TACACS+ project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_tacacs_plus.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_tacacs_plus.project_dir }}/image"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_tacacs_plus.config_dir }}"
+      owner: "{{ docker_tacacs_plus.run_uid }}"
+      group: "{{ docker_tacacs_plus.run_gid }}"
+      mode: "0750"
+    - path: "{{ docker_tacacs_plus.log_dir }}"
+      owner: "{{ docker_tacacs_plus.run_uid }}"
+      group: "{{ docker_tacacs_plus.run_gid }}"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Render TACACS+ image files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_tacacs_plus.project_dir }}/image/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: Dockerfile.j2
+      dest: Dockerfile
+      mode: "0644"
+    - src: .dockerignore.j2
+      dest: .dockerignore
+      mode: "0644"
+  loop_control:
+    label: "{{ item.dest }}"
+  notify: Restart docker tacacs plus compose
+
+- name: Render TACACS+ configuration
+  ansible.builtin.template:
+    src: tac_plus-ng.cfg.j2
+    dest: "{{ docker_tacacs_plus.config_dir }}/tac_plus-ng.cfg"
+    owner: "{{ docker_tacacs_plus.run_uid }}"
+    group: "{{ docker_tacacs_plus.run_gid }}"
+    mode: "0640"
+  no_log: true
+  diff: false
+  notify: Restart docker tacacs plus compose
+
+- name: Render TACACS+ Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_tacacs_plus.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  diff: false
+  notify: Restart docker tacacs plus compose
+
+- name: Install TACACS+ Compose systemd unit
+  ansible.builtin.template:
+    src: docker-tacacs-plus.service.j2
+    dest: /etc/systemd/system/docker-tacacs-plus.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker tacacs plus compose
+
+- name: Enable TACACS+ Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-tacacs-plus
+    enabled: true
+    daemon_reload: true
+  when: not ansible_check_mode
+
+- name: Start or update TACACS+ Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_tacacs_plus.project_dir }}"
+    project_name: "{{ docker_tacacs_plus.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_tacacs_plus.docker_binary }}"
+    state: present
+    pull: "{{ docker_tacacs_plus.pull_policy }}"
+    build: "{{ docker_tacacs_plus.build }}"
+    recreate: "{{ docker_tacacs_plus.recreate }}"
+    remove_orphans: "{{ docker_tacacs_plus.remove_orphans | bool }}"
+    wait: "{{ docker_tacacs_plus.wait | bool }}"
+    wait_timeout: "{{ docker_tacacs_plus.wait_timeout }}"
+  when:
+    - docker_tacacs_plus.apply | bool
+    - not ansible_check_mode

@@ -44,6 +44,15 @@ docker_zabbix:  # noqa: var-naming[no-role-prefix]
     env: {}
     volumes: []
 
+  ldap:
+    enabled: false
+    validate_certs: true
+    ca_path: ""
+    ca_container_path: /etc/ssl/certs/tmnt-openldap-ca.crt
+    network:
+      name: tmnt_openldap
+      external: true
+
   agent:
     enabled: false
     image: zabbix/zabbix-agent2

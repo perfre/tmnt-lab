@@ -59,6 +59,29 @@ docker_poweradmin:  # noqa: var-naming[no-role-prefix]
       name: tmnt_powerdns_api
       external: true
 
+  ldap:
+    enabled: false
+    uri: ldaps://openldap:1636
+    validate_certs: true
+    allow_plaintext: false
+    ca_path: ""
+    ca_container_path: /etc/ssl/certs/tmnt-openldap-ca.crt
+    base_dn: ou=people,dc=example,dc=org
+    bind_dn: ""
+    bind_password: ""
+    user_attribute: uid
+    search_filter: "(objectClass=posixAccount)"
+    protocol_version: "3"
+    sync_user_info: false
+    auto_provision: false
+    groups_attribute: memberOf
+    permission_template_mapping: ""
+    group_mapping: ""
+    default_permission_template: ""
+    network:
+      name: tmnt_openldap
+      external: true
+
   dns:
     ns1: ns1.powerdns.localhost
     ns2: ns2.powerdns.localhost

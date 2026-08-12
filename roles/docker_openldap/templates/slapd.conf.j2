@@ -48,7 +48,8 @@ access to attrs={{ docker_openldap.memberof.memberof_attribute }}
 {% if docker_openldap.access.read_dn | length > 0 %}
   by dn.exact="{{ docker_openldap.access.read_dn }}" read
 {% endif %}
-  by * read
+  by users read
+  by * none
 
 access to *
 {% if docker_openldap.access.read_dn | length > 0 %}

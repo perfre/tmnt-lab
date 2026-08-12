@@ -49,10 +49,13 @@
       - item.object_classes | length > 0
       - item.attributes is mapping
       - item.state | default('present') in ['present', 'absent']
+      - (item.password | default('') | length == 0) or item.password_hash_salt | default('') is match('^[./0-9A-Za-z]{8,16}$')
+      - item.password | default('') not in ['password', 'changeme', 'CHANGE_ME', 'admin']
     fail_msg: "Every OpenLDAP extra entry needs a DN below the base DN, object classes, attributes, and a supported state."
   loop: "{{ ops_openldap.extra_entries }}"
   loop_control:
     label: "{{ item.dn | default('undefined') }}"
+  no_log: true
 
 - name: Validate OpenLDAP users
   ansible.builtin.assert:
@@ -171,7 +174,17 @@
   community.general.ldap_entry:
     dn: "{{ item.dn }}"
     objectClass: "{{ item.object_classes }}"
-    attributes: "{{ item.attributes }}"
+    attributes: >-
+      {{
+        item.attributes | combine(
+          (item.password_hash | default('') | length > 0)
+          | ternary(
+              {'userPassword': item.password_hash},
+              (item.password | default('') | length > 0)
+              | ternary({'userPassword': '{CRYPT}' ~ (item.password | password_hash(hashtype='sha512', salt=item.password_hash_salt))}, {})
+            )
+        )
+      }}
     state: "{{ item.state | default('present') }}"
     server_uri: "{{ ops_openldap.server_uri }}"
     start_tls: "{{ ops_openldap.start_tls | bool }}"
@@ -187,11 +200,22 @@
     - ops_openldap.apply | bool
     - item.state | default('present') == 'present'
   no_log: true
+  diff: false
 
 - name: Reconcile OpenLDAP extra entry attributes
   community.general.ldap_attrs:
     dn: "{{ item.dn }}"
-    attributes: "{{ item.attributes }}"
+    attributes: >-
+      {{
+        item.attributes | combine(
+          (item.password_hash | default('') | length > 0)
+          | ternary(
+              {'userPassword': item.password_hash},
+              (item.password | default('') | length > 0)
+              | ternary({'userPassword': '{CRYPT}' ~ (item.password | password_hash(hashtype='sha512', salt=item.password_hash_salt))}, {})
+            )
+        )
+      }}
     state: exact
     server_uri: "{{ ops_openldap.server_uri }}"
     start_tls: "{{ ops_openldap.start_tls | bool }}"
@@ -207,6 +231,7 @@
     - ops_openldap.apply | bool
     - item.state | default('present') == 'present'
   no_log: true
+  diff: false
 
 - name: Reconcile OpenLDAP user entries
   community.general.ldap_entry:

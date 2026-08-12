@@ -1,0 +1,87 @@
+---
+- name: Validate ops_librenms_ldap configuration
+  ansible.builtin.assert:
+    that:
+      - ops_librenms_ldap is mapping
+      - ops_librenms_ldap.apply is boolean
+      - ops_librenms_ldap.enabled is boolean
+      - ops_librenms_ldap.project_dir is match('^/\\S+$')
+      - ops_librenms_ldap.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - ops_librenms_ldap.service | length > 0
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.server_uri is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.server_uri is match('^ldaps://') or ops_librenms_ldap.allow_plaintext | bool
+      - not ops_librenms_ldap.enabled | bool or not ops_librenms_ldap.server_uri is match('^ldaps://') or ops_librenms_ldap.validate_certs | bool
+      - not ops_librenms_ldap.enabled | bool or not ops_librenms_ldap.validate_certs | bool or ops_librenms_ldap.ca_container_path is match('^/\\S+$')
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.bind_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.bind_password | length >= 16
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.group_base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - not ops_librenms_ldap.enabled | bool or ops_librenms_ldap.user_filter | length > 0
+      - ops_librenms_ldap.group_member_type in ['username', 'dn']
+    fail_msg: >-
+      ops_librenms_ldap requires an existing LibreNMS Compose project and, when
+      enabled, a verified LDAP URI, bind account, search DNs, and group mapping.
+  no_log: true
+
+- name: Configure LibreNMS LDAP settings
+  community.docker.docker_compose_v2_exec:
+    project_src: "{{ ops_librenms_ldap.project_dir }}"
+    project_name: "{{ ops_librenms_ldap.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ ops_librenms_ldap.docker_binary }}"
+    service: "{{ ops_librenms_ldap.service }}"
+    argv:
+      - /opt/librenms/lnms
+      - config:set
+      - "{{ item.key }}"
+      - "{{ item.value }}"
+  loop:
+    - key: auth_mechanism
+      value: "{{ ops_librenms_ldap.enabled | ternary('ldap', 'mysql') }}"
+    - key: auth_ldap_server
+      value: "{{ ops_librenms_ldap.server_uri }}"
+    - key: auth_ldap_prefix
+      value: ""
+    - key: auth_ldap_suffix
+      value: ""
+    - key: auth_ldap_group
+      value: "{{ ops_librenms_ldap.admin_group_cn }}"
+    - key: auth_ldap_groupbase
+      value: "{{ ops_librenms_ldap.group_base_dn }}"
+    - key: auth_ldap_groupmemberattr
+      value: "{{ ops_librenms_ldap.group_member_attr }}"
+    - key: auth_ldap_groupmembertype
+      value: "{{ ops_librenms_ldap.group_member_type }}"
+    - key: auth_ldap_uid_attribute
+      value: "{{ ops_librenms_ldap.uid_attr }}"
+    - key: auth_ldap_binddn
+      value: "{{ ops_librenms_ldap.bind_dn }}"
+    - key: auth_ldap_bindpassword
+      value: "{{ ops_librenms_ldap.bind_password }}"
+    - key: auth_ldap_userdn
+      value: "{{ ops_librenms_ldap.base_dn }}"
+    - key: auth_ldap_user_filter
+      value: "{{ ops_librenms_ldap.user_filter }}"
+    - key: auth_ldap_attr.uid
+      value: "{{ ops_librenms_ldap.uid_attr }}"
+    - key: auth_ldap_attr.name
+      value: "{{ ops_librenms_ldap.name_attr }}"
+    - key: auth_ldap_attr.email
+      value: "{{ ops_librenms_ldap.email_attr }}"
+    - key: auth_ldap_timeout
+      value: "{{ ops_librenms_ldap.timeout }}"
+    - key: auth_ldap_debug
+      value: "{{ ops_librenms_ldap.debug | ternary('true', 'false') }}"
+    - key: auth_ldap_cacert
+      value: "{{ ops_librenms_ldap.ca_container_path }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when:
+    - ops_librenms_ldap.apply | bool
+    - not ansible_check_mode
+    - ops_librenms_ldap.enabled | bool or item.key == 'auth_mechanism'
+  changed_when: "'Configuration saved' in (ops_librenms_ldap_config_result.stdout | default(''))"
+  register: ops_librenms_ldap_config_result
+  no_log: true

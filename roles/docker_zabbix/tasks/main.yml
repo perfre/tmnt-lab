@@ -11,8 +11,15 @@
       - docker_zabbix.database.password | length > 0
       - docker_zabbix.database.network.external | bool
       - docker_zabbix.database.network.name | length > 0
+      - docker_zabbix.ldap.enabled is boolean
+      - not docker_zabbix.ldap.enabled | bool or not docker_zabbix.ldap.validate_certs | bool or docker_zabbix.ldap.ca_path | length > 0
+      - not docker_zabbix.ldap.enabled | bool or not docker_zabbix.ldap.validate_certs | bool or docker_zabbix.ldap.ca_container_path is match('^/\\S+$')
+      - not docker_zabbix.ldap.enabled | bool or docker_zabbix.ldap.network.external | bool
+      - not docker_zabbix.ldap.enabled | bool or docker_zabbix.ldap.network.name | length > 0
     fail_msg: >-
-      docker_zabbix requires a Zabbix 7.4 image tag and a complete external PostgreSQL connection.
+      docker_zabbix requires a Zabbix 7.4 image tag, complete external
+      PostgreSQL connection, and when LDAP is enabled a CA path and external
+      LDAP network.
 
 - name: Ensure Zabbix project directories exist
   ansible.builtin.file:
@@ -62,6 +69,7 @@
     name: docker-zabbix
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Start or update Zabbix Compose project
   community.docker.docker_compose_v2:
@@ -76,4 +84,6 @@
     remove_orphans: "{{ docker_zabbix.remove_orphans | bool }}"
     wait: "{{ docker_zabbix.wait | bool }}"
     wait_timeout: "{{ docker_zabbix.wait_timeout | default(omit, true) }}"
-  when: docker_zabbix.apply | bool
+  when:
+    - docker_zabbix.apply | bool
+    - not ansible_check_mode

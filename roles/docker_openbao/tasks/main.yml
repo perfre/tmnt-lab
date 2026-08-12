@@ -5,7 +5,14 @@
       - docker_openbao is mapping
       - docker_openbao.project_dir | length > 0
       - docker_openbao.image | length > 0
-    fail_msg: "docker_openbao must be a dictionary with project_dir and image set."
+      - docker_openbao.ldap.enabled is boolean
+      - not docker_openbao.ldap.enabled | bool or docker_openbao.ldap.ca_path | length > 0
+      - not docker_openbao.ldap.enabled | bool or docker_openbao.ldap.ca_container_path is match('^/\\S+$')
+      - not docker_openbao.ldap.enabled | bool or docker_openbao.ldap.network.external | bool
+      - not docker_openbao.ldap.enabled | bool or docker_openbao.ldap.network.name | length > 0
+    fail_msg: >-
+      docker_openbao must be a dictionary with project_dir and image set; LDAP
+      integration also requires an explicit external directory network.
 
 - name: Ensure OpenBao project directories exist
   ansible.builtin.file:
@@ -51,6 +58,7 @@
     name: docker-openbao
     enabled: true
     daemon_reload: true
+  when: not ansible_check_mode
 
 - name: Start or update OpenBao Compose project
   community.docker.docker_compose_v2:
@@ -65,4 +73,6 @@
     remove_orphans: "{{ docker_openbao.remove_orphans | bool }}"
     wait: "{{ docker_openbao.wait | bool }}"
     wait_timeout: "{{ docker_openbao.wait_timeout | default(omit, true) }}"
-  when: docker_openbao.apply | bool
+  when:
+    - docker_openbao.apply | bool
+    - not ansible_check_mode

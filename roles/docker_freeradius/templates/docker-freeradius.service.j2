@@ -1,0 +1,15 @@
+[Unit]
+Description=FreeRADIUS Docker Compose service
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_freeradius.project_dir }}
+ExecStart={{ docker_freeradius.docker_binary }} compose -f compose.yml up -d --remove-orphans
+ExecStop={{ docker_freeradius.docker_binary }} compose -f compose.yml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

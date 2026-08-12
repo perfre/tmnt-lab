@@ -4,3 +4,6 @@
     name: docker-zabbix
     state: restarted
     daemon_reload: true
+  when:
+    - docker_zabbix.apply | bool
+    - not ansible_check_mode
