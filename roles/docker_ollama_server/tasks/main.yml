@@ -8,8 +8,10 @@
       - docker_ollama_server.container_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
       - docker_ollama_server.image is not search(':latest$')
       - docker_ollama_server.image is search('@sha256:[0-9a-f]{64}$')
+      - docker_ollama_server.api.publish is boolean
       - docker_ollama_server.api.port | int >= 1024
       - docker_ollama_server.api.port | int <= 65535
+      - not docker_ollama_server.api.publish | bool or docker_ollama_server.api.bind_address in ['127.0.0.1', '::1']
       - docker_ollama_server.runtime_user.uid | int > 0
       - docker_ollama_server.runtime_user.gid | int > 0
       - docker_ollama_server.server.max_loaded_models | int >= 2
@@ -20,13 +22,12 @@
       - docker_ollama_server.gpu.devices | select('match', '^nvidia\\.com/gpu=') | list | length == docker_ollama_server.gpu.devices | length
       - not docker_ollama_server.ingress.enabled | bool or docker_ollama_server.ingress.external | bool
       - not docker_ollama_server.ingress.enabled | bool or docker_ollama_server.ingress.network_name | length > 0
-      - docker_ollama_server.lab_mode | bool or not docker_ollama_server.api.publish | bool
-      - not docker_ollama_server.lab_mode | bool or (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - not docker_ollama_server.lab_mode | bool or docker_ollama_server.api.bind_address in ['127.0.0.1', '::1']
+      - not (docker_ollama_server.api.publish | bool and docker_ollama_server.ingress.enabled | bool)
     fail_msg: >-
       docker_ollama_server requires a digest-pinned image, non-root UID/GID, NVIDIA CDI devices,
-      bounded concurrency, and safe networking. Lab publishing is loopback-only; non-lab
-      deployments must remain unpublished behind an authenticated TLS ingress.
+      bounded concurrency, and safe networking. Direct publishing of Ollama's unauthenticated
+      API is loopback-only; non-loopback access must use a separately owned authenticated
+      TLS ingress network.
 
 - name: Check for the requested NVIDIA CDI specification
   ansible.builtin.stat:

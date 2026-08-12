@@ -1,5 +1,5 @@
 ---
-docker_netbox:
+docker_netbox:  # noqa: var-naming[no-role-prefix]
   project_name: netbox
   project_dir: /opt/docker/netbox
   docker_binary: /usr/bin/docker

@@ -1,14 +1,13 @@
 ---
-- name: Validate docker_powerdns localhost lab configuration
+- name: Validate docker_powerdns configuration
   ansible.builtin.assert:
     that:
       - docker_powerdns is mapping
-      - docker_powerdns.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - docker_powerdns.bind_address in ['127.0.0.1', '::1']
+      - docker_powerdns.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_powerdns.project_dir is match('^/\\S+$')
+      - docker_powerdns.bind_address | length > 0
       - docker_powerdns.image is not search(':latest$')
-      - docker_powerdns.project_dir | length > 0
-      - docker_powerdns.config_file | length > 0
+      - docker_powerdns.config_file is match('^/\\S+$')
       - docker_powerdns.dns.container_port | int >= 1024
       - docker_powerdns.dns.container_port | int <= 65535
       - docker_powerdns.dns.published_port | int >= 1024
@@ -18,14 +17,17 @@
       - docker_powerdns.database.port | int <= 65535
       - docker_powerdns.database.name is match('^[A-Za-z0-9_]+$')
       - docker_powerdns.database.user is match('^[A-Za-z0-9_]+$')
-      - docker_powerdns.database.password == 'LAB_ONLY_POWERDNS_MARIADB_PASSWORD_DO_NOT_REUSE'
+      - docker_powerdns.database.password | length >= 16
+      - docker_powerdns.database.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_powerdns.database.network.external | bool
       - docker_powerdns.database.network.name | length > 0
       - docker_powerdns.api.enabled | bool
       - docker_powerdns.api.port | int >= 1024
       - docker_powerdns.api.port | int <= 65535
-      - docker_powerdns.api.key == 'LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE'
-      - docker_powerdns.api.webserver_password == 'LAB_ONLY_POWERDNS_WEBSERVER_PASSWORD_DO_NOT_REUSE'
+      - docker_powerdns.api.key | length >= 16
+      - docker_powerdns.api.webserver_password | length >= 16
+      - docker_powerdns.api.key not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - docker_powerdns.api.webserver_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_powerdns.api.allow_from is sequence
       - docker_powerdns.api.allow_from | length > 0
       - docker_powerdns.api.network.name | length > 0
@@ -34,9 +36,10 @@
       - docker_powerdns.recursor_network.subnet | length > 0
       - docker_powerdns.recursor_network.alias | length > 0
     fail_msg: >-
-      docker_powerdns currently supports disposable localhost lab deployments only.
-      Keep lab_mode enabled, target loopback, pin the image, use the synthetic
-      database/API credentials, and keep DNS on unprivileged loopback ports.
+      docker_powerdns requires explicit inventory settings, a pinned image,
+      database/API credentials, internal API/recursor networks, and
+      unprivileged DNS/API ports.
+  no_log: true
 
 - name: Ensure PowerDNS authoritative project directories exist
   ansible.builtin.file:

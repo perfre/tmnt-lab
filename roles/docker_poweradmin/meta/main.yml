@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: docker_poweradmin
   author: tmnt-lab
-  description: Run a disposable localhost-only Poweradmin web UI with Docker Compose and TLS.
+  description: Run a Poweradmin web UI with Docker Compose and TLS proxying.
   license: MIT
   min_ansible_version: "2.15"
 dependencies: []

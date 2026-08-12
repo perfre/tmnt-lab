@@ -2,7 +2,7 @@
 galaxy_info:
   role_name: docker_powerdns
   author: tmnt-lab
-  description: Run a disposable localhost-only PowerDNS authoritative server with Docker Compose.
+  description: Run a PowerDNS authoritative server with Docker Compose.
   license: MIT
   min_ansible_version: "2.15"
 dependencies: []

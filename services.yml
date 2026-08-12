@@ -1,20 +1,23 @@
 # Deployment pipeline
 
-- hosts: docker_hosts
+- name: Prepare Docker hosts
+  hosts: docker_hosts
   become: true
   gather_facts: true
   roles:
     - role: service_docker
       tags: [service_docker]
 
-- hosts: openbao
+- name: Deploy OpenBao
+  hosts: openbao
   become: true
   gather_facts: true
   roles:
     - role: docker_openbao
       tags: [docker_openbao]
 
-- hosts: mariadb
+- name: Deploy MariaDB stack
+  hosts: mariadb
   become: true
   gather_facts: true
   roles:
@@ -23,7 +26,8 @@
     - role: ops_mariadb
       tags: [ops_mariadb]
 
-- hosts: postgres
+- name: Deploy PostgreSQL stack
+  hosts: postgres
   become: true
   gather_facts: true
   roles:
@@ -44,7 +48,8 @@
     - role: docker_ldap_account_manager
       tags: [docker_ldap_account_manager]
 
-- hosts: ollama_server
+- name: Deploy Ollama stack
+  hosts: ollama_server
   become: true
   gather_facts: true
   roles:
@@ -53,21 +58,24 @@
     - role: ops_ollama_models
       tags: [ops_ollama_models]
 
-- hosts: atlassian_lab
+- name: Deploy Atlassian lab stack
+  hosts: atlassian_lab
   become: true
   gather_facts: true
   roles:
     - role: docker_atlassian_lab
       tags: [docker_atlassian_lab]
 
-- hosts: zabbix
+- name: Deploy Zabbix stack
+  hosts: zabbix
   become: true
   gather_facts: true
   roles:
     - role: docker_zabbix
       tags: [docker_zabbix]
 
-- hosts: librenms
+- name: Deploy LibreNMS
+  hosts: librenms
   become: true
   gather_facts: true
   roles:
@@ -86,28 +94,32 @@
     - role: docker_poweradmin
       tags: [docker_poweradmin]
 
-- hosts: netbox
+- name: Deploy NetBox
+  hosts: netbox
   become: true
   gather_facts: true
   roles:
     - role: docker_netbox
       tags: [docker_netbox]
 
-- hosts: zabbix_testhost
+- name: Deploy Zabbix test hosts
+  hosts: zabbix_testhost
   become: true
   gather_facts: true
   roles:
     - role: docker_zabbix_testhost
       tags: [docker_zabbix_testhost]
 
-- hosts: snmpv3_testhost
+- name: Deploy SNMPv3 test hosts
+  hosts: snmpv3_testhost
   become: true
   gather_facts: true
   roles:
     - role: docker_snmpv3_testhost
       tags: [docker_snmpv3_testhost]
 
-- hosts: network_device_emulator
+- name: Deploy network device emulator
+  hosts: network_device_emulator
   become: true
   gather_facts: true
   roles:

@@ -55,7 +55,7 @@ Groups using `groupOfNames` must declare at least one `member` because the schem
 Run this after `docker_openldap` or another reachable OpenLDAP deployment is healthy:
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags ops_openldap --limit ldap
 ```
 

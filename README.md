@@ -39,17 +39,21 @@ Install the repository's Ansible environment and collections:
 sudo ./ansible-setup.sh
 ```
 
-Alternatively, use an existing Ansible installation and install collections directly:
+The setup creates a shared Python virtual environment at `/opt/ansible` and system-wide wrappers in `/usr/local/bin`. Use `/usr/local/bin/ansible-*` for direct Ansible commands. For this committed localhost profile, prefer `/usr/local/bin/deploy`; it activates `/opt/ansible`, adds `-i ~/dev/tmnt-lab/inventory-local/`, and enables `--diff`.
+
+Refresh collections through the shared environment when requirements change:
 
 ```bash
-ansible-galaxy collection install -r ansible-galaxy-requirements.yml
+/usr/local/bin/ansible-galaxy collection install -r ansible-galaxy-requirements.yml
 ```
+
+If you intentionally use an external Ansible installation instead of the repository bootstrap, run the equivalent `ansible-*` commands from that environment.
 
 Validate before deployment:
 
 ```bash
-ansible-inventory -i inventory-local/hosts.yml --graph
-ansible-playbook -i inventory-local/hosts.yml services.yml --syntax-check
+/usr/local/bin/ansible-inventory -i inventory-local/hosts.yml --graph
+/usr/local/bin/ansible-playbook -i inventory-local/hosts.yml services.yml --syntax-check
 ```
 
 ## Deploy the localhost lab
@@ -59,7 +63,7 @@ The local inventory uses `ansible_connection: local`. It stores only conspicuous
 Deploy Docker, NVIDIA CDI, Ollama, and the default models:
 
 ```bash
-ansible-playbook -K -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml -K \
   --tags service_docker,docker_ollama_server,ops_ollama_models
 ```
 
@@ -98,7 +102,7 @@ curl http://127.0.0.1:11434/api/embed \
 Deploy the complete lab:
 
 ```bash
-ansible-playbook -K -i inventory-local/hosts.yml services.yml
+/usr/local/bin/deploy services.yml -K
 ```
 
 Before a complete deployment, read the MariaDB, PostgreSQL, LibreNMS, NetBox, Zabbix, Atlassian, PowerDNS, and Poweradmin role READMEs. The database refactor does not migrate data from older embedded database directories; application reconciliation can stop those old containers as orphans.
@@ -107,11 +111,11 @@ Also read the OpenLDAP, OpenLDAP operations, and LDAP Account Manager READMEs be
 Deploy or check one component with tags and a limit:
 
 ```bash
-ansible-playbook -K -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml -K \
   --tags docker_netbox --limit netbox
-ansible-playbook -K -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml -K \
   --tags docker_openldap,ops_openldap,docker_ldap_account_manager --limit ldap
-ansible-playbook -K -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml -K \
   --check --diff --tags docker_ollama_server --limit ollama_server
 ```
 
@@ -165,9 +169,9 @@ Then:
 Validate and deploy a production inventory:
 
 ```bash
-ansible-inventory -i inventory-production/hosts.yml --graph
-ansible-playbook -i inventory-production/hosts.yml services.yml --syntax-check
-ansible-playbook -K -i inventory-production/hosts.yml services.yml \
+/usr/local/bin/ansible-inventory -i inventory-production/hosts.yml --graph
+/usr/local/bin/ansible-playbook -i inventory-production/hosts.yml services.yml --syntax-check
+/usr/local/bin/ansible-playbook -K -i inventory-production/hosts.yml services.yml \
   --limit docker_hosts:ollama_server \
   --tags service_docker,docker_ollama_server,ops_ollama_models
 ```
@@ -180,7 +184,8 @@ Production status:
 - `docker_openldap`: production-capable when inventory supplies real secret material, correct DN/SAN values, verified TLS trust, and deliberate publish/bind settings.
 - `ops_openldap`: production-capable when inventory uses verified LDAPS or StartTLS and real bind credentials from a protected source.
 - `docker_ldap_account_manager`: production-capable when inventory supplies verified LDAPS trust, a least-privilege LDAP bind account, and production web TLS or authenticated ingress.
-- `docker_mariadb`, `docker_postgres`, `ops_mariadb`, `ops_postgres`, `docker_atlassian_lab`, `docker_powerdns`, `docker_powerdns_recursor`, and `docker_poweradmin`: currently localhost-lab only.
+- `ops_mariadb` and `ops_postgres`: inventory-profiled for loopback administrative bootstrap; non-loopback operations require verified database TLS where the module supports it.
+- `docker_mariadb`, `docker_postgres`, `docker_atlassian_lab`, `docker_powerdns`, `docker_powerdns_recursor`, and `docker_poweradmin`: usable for the committed localhost profile but still blocked from production until their documented TLS, secret, ingress, DNS-encryption, or migration gaps are closed.
 - LibreNMS, NetBox, Zabbix, OpenBao, and test-fixture roles still have production security debt. Do not treat them as production-ready without completing their TLS, secret, ingress, and image-pinning work.
 
 There is not yet a repository-owned production PKI or authenticated ingress role. Use inventory-supplied certificate paths or a separately owned ingress where those controls are required; do not work around missing authentication by publishing unauthenticated APIs directly.
@@ -192,7 +197,7 @@ Change the model list under `ops_ollama_models.models` in inventory. Every entry
 Update models once:
 
 ```bash
-ansible-playbook -K -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml -K \
   --tags ops_ollama_models \
   -e '{"ops_ollama_models":{"update_present_models":true}}'
 ```

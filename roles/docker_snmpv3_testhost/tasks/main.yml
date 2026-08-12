@@ -14,7 +14,19 @@
     owner: root
     group: root
     mode: "0755"
-  loop: "{{ [docker_snmpv3_testhost.project_dir, docker_snmpv3_testhost.project_dir + '/image'] + (docker_snmpv3_testhost.containers | dict2items | map(attribute='key') | map('regex_replace', '^', docker_snmpv3_testhost.project_dir + '/') | list) }}"
+  loop: "{{ docker_snmpv3_testhost_project_paths }}"
+  vars:
+    docker_snmpv3_testhost_project_paths: >-
+      {{
+        [docker_snmpv3_testhost.project_dir, docker_snmpv3_testhost.project_dir ~ '/image']
+        + (
+          docker_snmpv3_testhost.containers
+          | dict2items
+          | map(attribute='key')
+          | map('regex_replace', '^', docker_snmpv3_testhost.project_dir ~ '/')
+          | list
+        )
+      }}
 
 - name: Render SNMPv3 testhost image files
   ansible.builtin.template:

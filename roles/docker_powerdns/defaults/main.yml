@@ -11,8 +11,6 @@ docker_powerdns:  # noqa: var-naming[no-role-prefix]
   wait_timeout: 120
   restart: unless-stopped
 
-  # This first PowerDNS authoritative role is intentionally localhost-lab only.
-  lab_mode: true
   bind_address: 127.0.0.1
   image: docker.io/powerdns/pdns-auth-51:5.1.4
   timezone: Europe/Stockholm
@@ -40,8 +38,8 @@ docker_powerdns:  # noqa: var-naming[no-role-prefix]
     enabled: true
     address: 0.0.0.0
     port: 8081
-    key: LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE
-    webserver_password: LAB_ONLY_POWERDNS_WEBSERVER_PASSWORD_DO_NOT_REUSE
+    key: ""
+    webserver_password: ""
     allow_from:
       - 127.0.0.0/8
       - ::1/128

@@ -1,5 +1,5 @@
 ---
-service_docker:
+service_docker:  # noqa: var-naming[no-role-prefix]
   state: latest
   channel: stable
   prune_old_packages: true

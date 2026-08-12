@@ -8,15 +8,21 @@
       - ops_ollama_models.models | length > 0
       - (ops_ollama_models.models | map(attribute='name') | list | unique | length) == (ops_ollama_models.models | length)
       - ops_ollama_models.operation_timeout | int >= 60
+      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.scheme in ['http', 'https']
+      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.host | length > 0
       - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.port | int > 0
       - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.port | int <= 65535
-      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.lab_mode | bool or ops_ollama_models.warm_api.scheme == 'https'
-      - not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.lab_mode | bool or ops_ollama_models.warm_api.validate_certs | bool
-      - not ops_ollama_models.lab_mode | bool or (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - not ops_ollama_models.lab_mode | bool or not ops_ollama_models.warm_api.enabled | bool or ops_ollama_models.warm_api.host in ['localhost', '127.0.0.1', '::1']
+      - >-
+        not ops_ollama_models.warm_api.enabled | bool
+        or ops_ollama_models.warm_api.scheme == 'https'
+        or ops_ollama_models.warm_api.host in ['localhost', '127.0.0.1', '::1']
+      - >-
+        not ops_ollama_models.warm_api.enabled | bool
+        or ops_ollama_models.warm_api.scheme != 'https'
+        or ops_ollama_models.warm_api.validate_certs | bool
     fail_msg: >-
       ops_ollama_models requires unique model definitions and safe warm-up transport.
-      Lab warm-up is loopback-only; non-lab warm-up requires verified HTTPS.
+      Plain HTTP warm-up is loopback-only; non-loopback warm-up requires verified HTTPS.
 
 - name: Validate Ollama model definitions
   ansible.builtin.assert:
@@ -127,7 +133,7 @@
 - name: Warm configured Ollama models into memory
   ansible.builtin.uri:
     url: >-
-      {{ ops_ollama_models.warm_api.scheme }}://{{ ops_ollama_models.warm_api.host }}:{{ ops_ollama_models.warm_api.port }}{{ (item.type == 'embedding') | ternary('/api/embed', '/api/generate') }}
+      {{ ops_ollama_models_warm_api_base_url }}{{ (item.type == 'embedding') | ternary('/api/embed', '/api/generate') }}
     method: POST
     headers: "{{ ops_ollama_models.warm_api.headers }}"
     body_format: json
@@ -145,6 +151,9 @@
   loop_control:
     label: "{{ item.name }}"
   no_log: true
+  vars:
+    ops_ollama_models_warm_api_base_url: >-
+      {{ ops_ollama_models.warm_api.scheme }}://{{ ops_ollama_models.warm_api.host }}:{{ ops_ollama_models.warm_api.port }}
   when:
     - ops_ollama_models.apply | bool
     - ops_ollama_models.warm_api.enabled | bool

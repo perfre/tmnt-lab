@@ -11,8 +11,6 @@ docker_poweradmin:  # noqa: var-naming[no-role-prefix]
   wait_timeout: 180
   restart: unless-stopped
 
-  # This role is intentionally localhost-only and refuses non-lab operation.
-  lab_mode: true
   bind_address: 127.0.0.1
   timezone: Europe/Stockholm
 
@@ -33,12 +31,12 @@ docker_poweradmin:  # noqa: var-naming[no-role-prefix]
     pids_limit: 128
 
   secrets_dir: /opt/docker/poweradmin/secrets
-  session_key: LAB_ONLY_POWERADMIN_SESSION_KEY_DO_NOT_REUSE_0123456789abcdef
+  session_key: ""
 
   admin:
     create: true
     username: admin
-    password: LAB_ONLY_POWERADMIN_ADMIN_PASSWORD_DO_NOT_REUSE
+    password: ""
     email: admin@localhost
     full_name: Lab Administrator
 
@@ -56,7 +54,7 @@ docker_poweradmin:  # noqa: var-naming[no-role-prefix]
 
   powerdns_api:
     url: http://powerdns:8081
-    key: LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE
+    key: ""
     network:
       name: tmnt_powerdns_api
       external: true

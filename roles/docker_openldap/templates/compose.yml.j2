@@ -18,6 +18,7 @@ services:
     hostname: "{{ docker_openldap.hostname }}"
     restart: "{{ docker_openldap.restart }}"
     pull_policy: "{{ docker_openldap.pull_policy }}"
+    user: "{{ docker_openldap.run_uid }}:{{ docker_openldap.run_gid }}"
     read_only: true
     init: true
     security_opt:

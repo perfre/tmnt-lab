@@ -1,6 +1,6 @@
 # docker_powerdns
 
-Runs a PowerDNS Authoritative Server container with the Generic MySQL/MariaDB backend. This role is localhost-lab only: it refuses remote targets, binds DNS to loopback, stores a synthetic API key in a restricted config file, and keeps the unauthenticated HTTP API on an internal Docker network for `docker_poweradmin`.
+Runs a PowerDNS Authoritative Server container with the Generic MySQL/MariaDB backend. The committed local inventory binds DNS to loopback, stores synthetic API credentials in a restricted config file, and keeps the HTTP API on an internal Docker network for `docker_poweradmin`. Inventory chooses the DNS bind address; keep synthetic `LAB_ONLY_*` credentials confined to local profiles.
 
 ## Requirements
 
@@ -15,7 +15,6 @@ All variables live under `docker_powerdns`.
 
 ```yaml
 docker_powerdns:
-  lab_mode: true
   bind_address: 127.0.0.1
   dns:
     published_port: 5300
@@ -26,6 +25,7 @@ docker_powerdns:
     password: LAB_ONLY_POWERDNS_MARIADB_PASSWORD_DO_NOT_REUSE
   api:
     key: LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE
+    webserver_password: LAB_ONLY_POWERDNS_WEBSERVER_PASSWORD_DO_NOT_REUSE
 ```
 
 The role owns the internal `tmnt_powerdns_api` network consumed by `docker_poweradmin` and the internal `tmnt_powerdns_dns` network consumed by `docker_powerdns_recursor`. Do not recreate or delete those networks from another role.
@@ -37,12 +37,12 @@ The role owns the internal `tmnt_powerdns_api` network consumed by `docker_power
 - Runtime files: `/opt/docker/powerdns`
 - Persistent DNS state: shared MariaDB database `powerdns`
 
-The PowerDNS HTTP API is plaintext because it is not published and is reachable only on the isolated Compose API network. Production use is blocked until the repository has a PKI-backed, authenticated DNS/API ingress and a non-lab secret source.
+The PowerDNS HTTP API is plaintext because it is not published and is reachable only on the isolated Compose API network. Production use is blocked until the repository has a PKI-backed, authenticated DNS/API ingress, deliberate DNS exposure policy, and a protected secret source.
 
 ## Deploy
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags docker_mariadb,ops_mariadb,docker_powerdns,docker_poweradmin
 ```
 

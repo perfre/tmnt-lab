@@ -1,10 +1,15 @@
 ---
-ops_mariadb:
-  lab_mode: true
+ops_mariadb:  # noqa: var-naming[no-role-prefix]
   login_host: 127.0.0.1
   login_port: 3306
   login_user: root
-  login_password: LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE
+  login_password: ""
+  tls:
+    enabled: false
+    ca_cert: ""
+    client_cert: ""
+    client_key: ""
+    check_hostname: true
   driver_packages:
     Debian:
       - python3-pymysql

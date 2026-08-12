@@ -1,5 +1,5 @@
 ---
-docker_librenms:
+docker_librenms:  # noqa: var-naming[no-role-prefix]
   project_name: librenms
   project_dir: /opt/docker/librenms
   docker_binary: /usr/bin/docker

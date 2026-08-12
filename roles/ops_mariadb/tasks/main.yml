@@ -1,23 +1,29 @@
 ---
-- name: Validate ops_mariadb localhost lab boundary
+- name: Validate ops_mariadb configuration
   ansible.builtin.assert:
     that:
       - ops_mariadb is mapping
-      - ops_mariadb.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - ops_mariadb.login_host in ['localhost', '127.0.0.1', '::1']
+      - ops_mariadb.login_host | length > 0
       - ops_mariadb.login_port | int >= 1024
       - ops_mariadb.login_port | int <= 65535
-      - ops_mariadb.login_user == 'root'
-      - ops_mariadb.login_password == 'LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE'
+      - ops_mariadb.login_user | length > 0
+      - ops_mariadb.login_password | length >= 16
+      - ops_mariadb.login_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - ops_mariadb.tls.enabled is boolean
+      - ops_mariadb.tls.check_hostname is boolean
+      - ops_mariadb.tls.enabled | bool or ops_mariadb.login_host in ['localhost', '127.0.0.1', '::1']
+      - not ops_mariadb.tls.enabled | bool or ops_mariadb.tls.ca_cert | length > 0
+      - not ops_mariadb.tls.enabled | bool or ops_mariadb.tls.check_hostname | bool
       - ops_mariadb.databases is sequence
       - ops_mariadb.users is sequence
       - ansible_facts["os_family"] in ops_mariadb.driver_packages
       - (ops_mariadb.databases | map(attribute='name') | list | unique | length) == (ops_mariadb.databases | length)
       - (ops_mariadb.users | map(attribute='name') | list | unique | length) == (ops_mariadb.users | length)
     fail_msg: >-
-      ops_mariadb is a localhost-lab bootstrap role. Database and user names must be unique,
-      the connection must stay on loopback, and the synthetic administrator credential must match docker_mariadb.
+      ops_mariadb requires unique database/user definitions, a non-empty
+      administrator credential, and either a loopback administrative connection
+      or verified MariaDB TLS with hostname checking.
+  no_log: true
 
 - name: Validate MariaDB database definitions
   ansible.builtin.assert:
@@ -35,14 +41,17 @@
     that:
       - item.name is string
       - item.name is match('^[A-Za-z0-9_]+$')
-      - item.host | default('%') in ['%','localhost','127.0.0.1','::1']
+      - item.host | default('%') is string
+      - item.host | default('%') | length > 0
+      - item.host | default('%') is not search('\\s')
       - item.password is defined
-      - item.password is match('^LAB_ONLY_[A-Z0-9_]+_DO_NOT_REUSE$')
+      - item.password | length >= 16
+      - item.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - item.privileges is mapping
       - item.state | default('present') in ['present', 'absent']
     fail_msg: >-
       Every ops_mariadb user needs a safe name, explicit privilege mapping, supported host/state,
-      and a conspicuously synthetic LAB_ONLY_*_DO_NOT_REUSE password.
+      and a non-empty password from inventory or a protected secret source.
   loop: "{{ ops_mariadb.users }}"
   loop_control:
     label: "{{ item.name | default('undefined') }}"
@@ -53,7 +62,7 @@
     name: "{{ ops_mariadb.driver_packages[ansible_facts['os_family']] }}"
     state: present
 
-- name: Wait for the loopback MariaDB administrative endpoint
+- name: Wait for the MariaDB administrative endpoint
   ansible.builtin.wait_for:
     host: "{{ ops_mariadb.login_host }}"
     port: "{{ ops_mariadb.login_port }}"
@@ -69,6 +78,10 @@
     login_port: "{{ ops_mariadb.login_port }}"
     login_user: "{{ ops_mariadb.login_user }}"
     login_password: "{{ ops_mariadb.login_password }}"
+    ca_cert: "{{ ops_mariadb.tls.ca_cert | default(omit, true) }}"
+    client_cert: "{{ ops_mariadb.tls.client_cert | default(omit, true) }}"
+    client_key: "{{ ops_mariadb.tls.client_key | default(omit, true) }}"
+    check_hostname: "{{ (ops_mariadb.tls.enabled | bool) | ternary(ops_mariadb.tls.check_hostname | bool, omit) }}"
     config_file: ""
   loop: "{{ ops_mariadb.databases }}"
   loop_control:
@@ -88,6 +101,10 @@
     login_port: "{{ ops_mariadb.login_port }}"
     login_user: "{{ ops_mariadb.login_user }}"
     login_password: "{{ ops_mariadb.login_password }}"
+    ca_cert: "{{ ops_mariadb.tls.ca_cert | default(omit, true) }}"
+    client_cert: "{{ ops_mariadb.tls.client_cert | default(omit, true) }}"
+    client_key: "{{ ops_mariadb.tls.client_key | default(omit, true) }}"
+    check_hostname: "{{ (ops_mariadb.tls.enabled | bool) | ternary(ops_mariadb.tls.check_hostname | bool, omit) }}"
     config_file: ""
   loop: "{{ ops_mariadb.users }}"
   loop_control:

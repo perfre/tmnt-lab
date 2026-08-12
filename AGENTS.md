@@ -179,8 +179,8 @@ Dockerfiles must use a pinned, minimal trusted base, install only required packa
 Run the narrowest relevant checks, then expand according to risk. At minimum for Ansible or role changes:
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml --syntax-check
-ansible-lint .
+/usr/local/bin/ansible-playbook -i inventory-local/hosts.yml services.yml --syntax-check
+/usr/local/bin/ansible-lint .
 ```
 
 If `ansible-lint` is unavailable, report that rather than claiming it passed. For a changed role, also perform a check-mode run limited to a safe test host when the environment supports it. Never use check mode as proof of runtime correctness.
@@ -207,7 +207,7 @@ Before deployment, validate the rendered Compose model with `docker compose conf
 - renewal changes the leaf certificate and reloads only the affected service;
 - rollback restores the previous working configuration without data loss.
 
-Useful commands include `ansible-playbook --check --diff --limit <safe-host>`, `docker compose config --quiet`, `openssl s_client -verify_return_error -CAfile <ca.pem> -connect <host>:<port> -servername <dns-name>`, and `ss -lntup`. Redact credentials, tokens, private keys, and sensitive inventory values from all captured output.
+Useful commands include `/usr/local/bin/ansible-playbook --check --diff --limit <safe-host>`, `/usr/local/bin/deploy services.yml --tags <role_tag> --limit <safe-host>`, `docker compose config --quiet`, `openssl s_client -verify_return_error -CAfile <ca.pem> -connect <host>:<port> -servername <dns-name>`, and `ss -lntup`. Redact credentials, tokens, private keys, and sensitive inventory values from all captured output.
 
 ## Documentation and change acceptance
 

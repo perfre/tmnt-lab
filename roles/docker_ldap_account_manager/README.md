@@ -48,7 +48,7 @@ The LAM image is digest-pinned and runs as `www-data` (`33:33`). The application
 Run after OpenLDAP is reachable and the LDAP network exists:
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags docker_ldap_account_manager --limit ldap
 ```
 

@@ -6,4 +6,3 @@
     daemon_reload: true
   no_log: true
   when: docker_atlassian_lab.apply | bool
-

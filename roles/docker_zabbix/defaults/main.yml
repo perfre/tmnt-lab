@@ -1,5 +1,5 @@
 ---
-docker_zabbix:
+docker_zabbix:  # noqa: var-naming[no-role-prefix]
   project_name: zabbix
   project_dir: /opt/docker/zabbix
   docker_binary: /usr/bin/docker

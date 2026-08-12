@@ -1,11 +1,14 @@
 ---
-ops_postgres:
-  lab_mode: true
+ops_postgres:  # noqa: var-naming[no-role-prefix]
   login_host: 127.0.0.1
   login_port: 5432
   login_user: postgres
-  login_password: LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE
+  login_password: ""
   ssl_mode: disable
+  tls:
+    ca_cert: ""
+    client_cert: ""
+    client_key: ""
   driver_packages:
     Debian:
       - python3-psycopg2

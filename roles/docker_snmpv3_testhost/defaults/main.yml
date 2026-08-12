@@ -1,5 +1,5 @@
 ---
-docker_snmpv3_testhost:
+docker_snmpv3_testhost:  # noqa: var-naming[no-role-prefix]
   project_name: snmpv3-testhosts
   project_dir: /opt/docker/snmpv3-testhosts
   docker_binary: /usr/bin/docker

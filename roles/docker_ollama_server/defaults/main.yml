@@ -1,5 +1,5 @@
 ---
-docker_ollama_server:
+docker_ollama_server:  # noqa: var-naming[no-role-prefix]
   project_name: ollama-server
   project_dir: /opt/docker/ollama-server
   docker_binary: /usr/bin/docker
@@ -12,8 +12,7 @@ docker_ollama_server:
   wait_timeout: 300
   restart: unless-stopped
 
-  # Safe non-lab defaults publish no unauthenticated API port.
-  lab_mode: false
+  # Safe defaults publish no unauthenticated API port.
   image: docker.io/ollama/ollama:0.32.5@sha256:4dea9fb511947e24a84237bb636b0203abcb2ff0d3fbc7b4ff865deb91362131
   data_dir: /opt/docker/ollama-server/models
   runtime_user:

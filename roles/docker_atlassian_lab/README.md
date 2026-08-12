@@ -1,6 +1,6 @@
 # docker_atlassian_lab
 
-Runs single-node Jira Software Data Center and Confluence Data Center containers with an Nginx TLS proxy. PostgreSQL 17 is an external dependency owned by `docker_postgres`; both application databases and users are owned by `ops_postgres`. This role is only for a disposable lab on localhost. It refuses remote targets, binds HTTPS to `127.0.0.1`, uses synthetic database passwords, and creates a disposable local CA on the target.
+Runs single-node Jira Software Data Center and Confluence Data Center containers with an Nginx TLS proxy. PostgreSQL 17 is an external dependency owned by `docker_postgres`; both application databases and users are owned by `ops_postgres`. The committed local inventory binds HTTPS to `127.0.0.1`, uses synthetic database passwords, and creates a disposable local CA on the target. Synthetic `LAB_ONLY_*` credentials may only be used with loopback publishing.
 
 ## Licensing limitation
 
@@ -27,7 +27,6 @@ All role configuration lives under `docker_atlassian_lab`.
 
 ```yaml
 docker_atlassian_lab:
-  lab_mode: true
   bind_address: 127.0.0.1
   jira:
     https_port: 8443
@@ -39,18 +38,18 @@ docker_atlassian_lab:
       external: true
 ```
 
-The built-in database passwords are intentionally synthetic and accepted only while `lab_mode` is true. Do not override or reuse them. Application administrator accounts and license keys are entered through the Atlassian setup wizards and must also be lab-only.
+The local inventory database passwords are intentionally synthetic. Do not reuse them. Application administrator accounts and license keys are entered through the Atlassian setup wizards and must match the inventory profile and licensing terms.
 
 ## Deploy and trust the disposable CA
 
 Deploy the shared database bootstrap and application roles (the normal unfiltered playbook does this in dependency order):
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags docker_postgres,ops_postgres,docker_atlassian_lab
 ```
 
-The generated public CA certificate is `/opt/docker/atlassian-lab/pki/ca.crt` on the WSL host. Import only that public certificate into the browser or test client used for this lab. Never distribute or trust the disposable CA outside this localhost environment.
+The generated public CA certificate is `/opt/docker/atlassian-lab/pki/ca.crt` on the target host. Import only that public certificate into clients that should trust this inventory profile. Never distribute or trust the disposable local-profile CA broadly.
 
 Open:
 
@@ -71,7 +70,7 @@ openssl s_client -verify_return_error \
 ss -lnt | grep -E '127.0.0.1:(8443|8444)'
 ```
 
-The Jira and Confluence containers intentionally retain writable application filesystems because Atlassian's startup scripts render Tomcat configuration there. They still run as the documented image UIDs, drop all capabilities, use `no-new-privileges`, and expose no direct application or database ports. The shared database's administrative port is loopback-only.
+The Jira and Confluence containers intentionally retain writable application filesystems because Atlassian's startup scripts render Tomcat configuration there. They still run as the documented image UIDs, drop all capabilities, use `no-new-privileges`, and expose no direct application or database ports. Production use remains blocked until database TLS, protected secret sourcing, certificate trust, backup/restore, and license handling are finalized for that inventory.
 
 ## Reset or remove
 

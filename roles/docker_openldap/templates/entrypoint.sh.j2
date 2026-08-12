@@ -2,11 +2,8 @@
 set -eu
 
 mkdir -p /run/slapd /var/lib/ldap
-chown {{ docker_openldap.run_uid }}:{{ docker_openldap.run_gid }} /run/slapd /var/lib/ldap
 
 exec slapd \
   -f /etc/ldap/slapd.conf \
   -h "${LDAP_URLS}" \
-  -u openldap \
-  -g openldap \
   -d "${LDAP_LOG_LEVEL:-0}"

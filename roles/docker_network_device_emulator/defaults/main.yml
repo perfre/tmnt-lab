@@ -1,5 +1,5 @@
 ---
-docker_network_device_emulator:
+docker_network_device_emulator:  # noqa: var-naming[no-role-prefix]
   project_name: network-device-emulator
   project_dir: /opt/docker/network-device-emulator
   docker_binary: /usr/bin/docker

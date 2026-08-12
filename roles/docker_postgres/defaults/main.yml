@@ -1,5 +1,5 @@
 ---
-docker_postgres:
+docker_postgres:  # noqa: var-naming[no-role-prefix]
   project_name: postgres
   project_dir: /opt/docker/postgres
   docker_binary: /usr/bin/docker
@@ -11,8 +11,6 @@ docker_postgres:
   wait_timeout: 120
   restart: unless-stopped
 
-  # This initial shared database deployment is intentionally localhost-lab only.
-  lab_mode: true
   bind_address: 127.0.0.1
   image: docker.io/library/postgres:17-bookworm
   data_dir: /opt/docker/postgres/data
@@ -24,7 +22,7 @@ docker_postgres:
     name: tmnt_postgres_admin
     alias: postgres-admin
   admin_user: postgres
-  admin_password: LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE
+  admin_password: ""
 
   resources:
     memory_limit: 2g

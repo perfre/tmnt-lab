@@ -4,6 +4,8 @@ Reconciles the MariaDB databases, users, and grants declared under `ops_mariadb`
 
 ```yaml
 ops_mariadb:
+  login_host: 127.0.0.1
+  login_password: LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE
   databases:
     - name: application
   users:
@@ -14,4 +16,4 @@ ops_mariadb:
         "application.*": ALL
 ```
 
-This version is localhost-lab only and installs the target host's PyMySQL package. It connects through the loopback-only administrative port owned by `docker_mariadb`; that port is published through the separate `tmnt_mariadb_admin` network while application consumers stay on the internal `tmnt_mariadb` network. Run it after that role. Production use requires Vault or an approved secret source plus verified MariaDB TLS.
+This role installs the target host's PyMySQL package. The committed local inventory connects through the loopback-only administrative port owned by `docker_mariadb`; that port is published through the separate `tmnt_mariadb_admin` network while application consumers stay on the internal `tmnt_mariadb` network. Non-loopback operation requires `tls.enabled: true`, a CA certificate, hostname checking, and secrets from Vault or another protected source. Run it after the database runtime role.

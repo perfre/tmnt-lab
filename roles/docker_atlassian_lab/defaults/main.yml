@@ -1,5 +1,5 @@
 ---
-docker_atlassian_lab:
+docker_atlassian_lab:  # noqa: var-naming[no-role-prefix]
   project_name: atlassian-lab
   project_dir: /opt/docker/atlassian-lab
   docker_binary: /usr/bin/docker
@@ -11,8 +11,6 @@ docker_atlassian_lab:
   wait_timeout: 900
   restart: unless-stopped
 
-  # This role is intentionally localhost-only and refuses non-lab operation.
-  lab_mode: true
   bind_address: 127.0.0.1
   timezone: Europe/Stockholm
 
@@ -53,13 +51,13 @@ docker_atlassian_lab:
       port: "5432"
       name: jira
       user: jira
-      password: LAB_ONLY_JIRA_DB_PASSWORD_DO_NOT_REUSE
+      password: ""
     confluence:
       host: postgres
       port: "5432"
       name: confluence
       user: confluence
-      password: LAB_ONLY_CONFLUENCE_DB_PASSWORD_DO_NOT_REUSE
+      password: ""
 
   pki:
     dir: /opt/docker/atlassian-lab/pki

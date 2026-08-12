@@ -1,15 +1,14 @@
 ---
-- name: Validate docker_poweradmin configuration and localhost boundary
+- name: Validate docker_poweradmin configuration
   ansible.builtin.assert:
     that:
       - docker_poweradmin is mapping
-      - docker_poweradmin.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - docker_poweradmin.bind_address in ['127.0.0.1', '::1']
+      - docker_poweradmin.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_poweradmin.project_dir is match('^/\\S+$')
+      - not docker_poweradmin.web.publish | bool or docker_poweradmin.bind_address | length > 0
       - docker_poweradmin.image is not search(':latest$')
       - docker_poweradmin.proxy.image is not search(':latest$')
-      - docker_poweradmin.project_dir | length > 0
-      - docker_poweradmin.secrets_dir | length > 0
+      - docker_poweradmin.secrets_dir is match('^/\\S+$')
       - docker_poweradmin.web.publish is boolean
       - docker_poweradmin.web.hostname | length > 0
       - docker_poweradmin.web.https_port | int >= 1024
@@ -22,28 +21,43 @@
       - docker_poweradmin.database.port | int <= 65535
       - docker_poweradmin.database.name is match('^[A-Za-z0-9_]+$')
       - docker_poweradmin.database.user is match('^[A-Za-z0-9_]+$')
-      - docker_poweradmin.database.password == 'LAB_ONLY_POWERADMIN_MARIADB_PASSWORD_DO_NOT_REUSE'
+      - docker_poweradmin.database.password | length >= 16
+      - docker_poweradmin.database.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_poweradmin.database.init_pdns_schema | bool
       - docker_poweradmin.database.network.external | bool
       - docker_poweradmin.database.network.name | length > 0
       - docker_poweradmin.powerdns_api.url is match('^http://[^/]+:[0-9]+$')
-      - docker_poweradmin.powerdns_api.key == 'LAB_ONLY_POWERDNS_API_KEY_DO_NOT_REUSE'
+      - docker_poweradmin.powerdns_api.key | length >= 16
+      - docker_poweradmin.powerdns_api.key not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_poweradmin.powerdns_api.network.external | bool
       - docker_poweradmin.powerdns_api.network.name | length > 0
       - docker_poweradmin.admin.create | bool
       - docker_poweradmin.admin.username is match('^[A-Za-z0-9_.-]+$')
-      - docker_poweradmin.admin.password == 'LAB_ONLY_POWERADMIN_ADMIN_PASSWORD_DO_NOT_REUSE'
-      - docker_poweradmin.session_key == 'LAB_ONLY_POWERADMIN_SESSION_KEY_DO_NOT_REUSE_0123456789abcdef'
+      - docker_poweradmin.admin.password | length >= 16
+      - docker_poweradmin.admin.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - docker_poweradmin.session_key | length >= 32
+      - >-
+        not (
+          docker_poweradmin.database.password is match('^LAB_ONLY_')
+          or docker_poweradmin.powerdns_api.key is match('^LAB_ONLY_')
+          or docker_poweradmin.admin.password is match('^LAB_ONLY_')
+          or docker_poweradmin.session_key is match('^LAB_ONLY_')
+        )
+        or not docker_poweradmin.web.publish | bool
+        or docker_poweradmin.bind_address in ['127.0.0.1', '::1']
       - docker_poweradmin.security.password_encryption in ['bcrypt', 'argon2i', 'argon2id']
+      - docker_poweradmin.pki.dir is match('^/\\S+$')
       - docker_poweradmin.pki.leaf_validity_days | int <= 397
       - docker_poweradmin.pki.renew_before_days | int > 0
       - docker_poweradmin.pki.renew_before_days | int < docker_poweradmin.pki.leaf_validity_days | int
       - docker_poweradmin.pki.subject_alt_names is sequence
       - docker_poweradmin.pki.subject_alt_names | length > 0
     fail_msg: >-
-      docker_poweradmin is a disposable localhost-only role. It requires lab_mode=true,
-      loopback binding, pinned images, synthetic lab credentials, an external MariaDB
-      network, an internal PowerDNS API network, and a short-lived local TLS certificate.
+      docker_poweradmin requires explicit inventory settings, pinned images,
+      database/API/admin credentials, external MariaDB and PowerDNS API networks,
+      and a short-lived TLS certificate. Synthetic LAB_ONLY credentials may only
+      be published on loopback.
+  no_log: true
 
 - name: Ensure Poweradmin project directories exist
   ansible.builtin.file:

@@ -42,14 +42,14 @@ Published ports are disabled by default. Set `ldap.publish` or `ldaps.publish` i
 
 ## Trust Model
 
-OpenLDAP terminates TLS directly. Health checks use LDAPS with CA validation. The container starts as root only long enough for volume ownership setup; `slapd` runs as Debian's `openldap` user (`100:101`), drops all Linux capabilities, uses `no-new-privileges`, and has a read-only root filesystem.
+OpenLDAP terminates TLS directly. Health checks use LDAPS with CA validation. The container runs directly as Debian's `openldap` user (`100:101`), drops all Linux capabilities, uses `no-new-privileges`, and has a read-only root filesystem. Ansible prepares the writable data and runtime directories with the required ownership before Compose starts the service.
 
 The generated CA is local deployment material. For production, either replace it with inventory-provided certificate paths from your PKI or treat the generated CA as target-local trust material and distribute only its public certificate deliberately.
 
 ## Deployment
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags docker_openldap --limit ldap
 ```
 

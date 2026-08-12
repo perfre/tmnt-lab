@@ -1,7 +1,6 @@
 ---
-ops_ollama_models:
+ops_ollama_models:  # noqa: var-naming[no-role-prefix]
   apply: true
-  lab_mode: false
   container_name: ollama_server
   update_present_models: false
   operation_timeout: 3600

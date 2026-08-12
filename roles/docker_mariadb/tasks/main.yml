@@ -1,23 +1,27 @@
 ---
-- name: Validate docker_mariadb localhost lab configuration
+- name: Validate docker_mariadb configuration
   ansible.builtin.assert:
     that:
       - docker_mariadb is mapping
-      - docker_mariadb.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
+      - docker_mariadb.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_mariadb.project_dir is match('^/\\S+$')
+      - docker_mariadb.data_dir is match('^/\\S+$')
       - docker_mariadb.bind_address in ['127.0.0.1', '::1']
       - docker_mariadb.listen_port | int >= 1024
       - docker_mariadb.listen_port | int <= 65535
       - docker_mariadb.image is not search(':latest$')
+      - docker_mariadb.admin_password | length >= 16
+      - docker_mariadb.admin_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - docker_mariadb.network.name | length > 0
       - docker_mariadb.network.alias | length > 0
       - docker_mariadb.admin_network.name | length > 0
       - docker_mariadb.admin_network.alias | length > 0
       - docker_mariadb.admin_network.name != docker_mariadb.network.name
-      - docker_mariadb.admin_password == 'LAB_ONLY_MARIADB_ADMIN_PASSWORD_DO_NOT_REUSE'
     fail_msg: >-
-      docker_mariadb currently supports disposable localhost lab deployments only.
-      Keep lab_mode enabled, target loopback, use the synthetic admin password, and pin the image.
+      docker_mariadb requires explicit inventory settings, a pinned image, an
+      administrator secret, internal application/admin networks, and a loopback
+      administrative listener until MariaDB TLS is added to the runtime role.
+  no_log: true
 
 - name: Ensure MariaDB project and data directories exist
   ansible.builtin.file:
@@ -36,7 +40,7 @@
       group: "999"
       mode: "0700"
 
-- name: Render synthetic MariaDB administrator secret
+- name: Render MariaDB administrator secret
   ansible.builtin.copy:
     content: "{{ docker_mariadb.admin_password }}\n"
     dest: "{{ docker_mariadb.project_dir }}/root-password"

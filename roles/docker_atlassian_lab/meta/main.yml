@@ -2,8 +2,7 @@
 galaxy_info:
   role_name: docker_atlassian_lab
   author: tmnt-lab
-  description: Run a disposable localhost-only Jira and Confluence Data Center lab with Docker Compose.
+  description: Run a Jira and Confluence Data Center lab with Docker Compose and TLS proxying.
   license: MIT
   min_ansible_version: "2.15"
 dependencies: []
-

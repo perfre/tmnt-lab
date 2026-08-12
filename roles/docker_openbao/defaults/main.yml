@@ -1,5 +1,5 @@
 ---
-docker_openbao:
+docker_openbao:  # noqa: var-naming[no-role-prefix]
   project_name: openbao
   project_dir: /opt/docker/openbao
   docker_binary: /usr/bin/docker

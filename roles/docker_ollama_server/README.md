@@ -6,11 +6,10 @@ Runs a pinned Ollama server with NVIDIA CDI GPU access. This role owns only the 
 
 Ollama's local API has no built-in authentication. Safe non-lab defaults publish no host port. A production deployment must attach Ollama to an explicit external ingress network and place an authenticated TLS proxy, using a certificate from the local PKI, in front of it.
 
-Lab mode is explicit, localhost-only, and publishes plaintext only on `127.0.0.1:11434`. Cloud execution and web-search features are disabled with `OLLAMA_NO_CLOUD=1`; pulling local model artifacts from the Ollama registry remains supported.
+The committed local inventory publishes the plaintext API only on `127.0.0.1:11434`. Direct publishing is always restricted to loopback because the API is unauthenticated. Cloud execution and web-search features are disabled with `OLLAMA_NO_CLOUD=1`; pulling local model artifacts from the Ollama registry remains supported.
 
 ```yaml
 docker_ollama_server:
-  lab_mode: true
   api:
     publish: true
     bind_address: 127.0.0.1
@@ -27,7 +26,6 @@ The container runs as UID/GID 1000, drops every capability, uses `no-new-privile
 
 ```yaml
 docker_ollama_server:
-  lab_mode: false
   api:
     publish: false
   ingress:

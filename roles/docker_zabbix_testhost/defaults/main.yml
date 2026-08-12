@@ -1,5 +1,5 @@
 ---
-docker_zabbix_testhost:
+docker_zabbix_testhost:  # noqa: var-naming[no-role-prefix]
   project_name: zabbix-testhosts
   project_dir: /opt/docker/zabbix-testhosts
   docker_binary: /usr/bin/docker

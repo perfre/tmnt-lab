@@ -1,24 +1,27 @@
 ---
-- name: Validate ops_postgres localhost lab boundary
+- name: Validate ops_postgres configuration
   ansible.builtin.assert:
     that:
       - ops_postgres is mapping
-      - ops_postgres.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - ops_postgres.login_host in ['localhost', '127.0.0.1', '::1']
+      - ops_postgres.login_host | length > 0
       - ops_postgres.login_port | int >= 1024
       - ops_postgres.login_port | int <= 65535
-      - ops_postgres.login_user == 'postgres'
-      - ops_postgres.login_password == 'LAB_ONLY_POSTGRES_ADMIN_PASSWORD_DO_NOT_REUSE'
-      - ops_postgres.ssl_mode == 'disable'
+      - ops_postgres.login_user | length > 0
+      - ops_postgres.login_password | length >= 16
+      - ops_postgres.login_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - ops_postgres.ssl_mode in ['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full']
+      - ops_postgres.login_host in ['localhost', '127.0.0.1', '::1'] or ops_postgres.ssl_mode == 'verify-full'
+      - ops_postgres.ssl_mode != 'verify-full' or ops_postgres.tls.ca_cert | length > 0
       - ops_postgres.users is sequence
       - ops_postgres.databases is sequence
       - ansible_facts["os_family"] in ops_postgres.driver_packages
       - (ops_postgres.users | map(attribute='name') | list | unique | length) == (ops_postgres.users | length)
       - (ops_postgres.databases | map(attribute='name') | list | unique | length) == (ops_postgres.databases | length)
     fail_msg: >-
-      ops_postgres is a localhost-lab bootstrap role. Database and user names must be unique,
-      the connection must stay on loopback, and the synthetic administrator credential must match docker_postgres.
+      ops_postgres requires unique database/user definitions, a non-empty
+      administrator credential, and either a loopback administrative connection
+      or PostgreSQL ssl_mode=verify-full with a CA certificate.
+  no_log: true
 
 - name: Validate PostgreSQL user definitions
   ansible.builtin.assert:
@@ -26,11 +29,12 @@
       - item.name is string
       - item.name is match('^[A-Za-z0-9_]+$')
       - item.password is defined
-      - item.password is match('^LAB_ONLY_[A-Z0-9_]+_DO_NOT_REUSE$')
+      - item.password | length >= 16
+      - item.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
       - item.state | default('present') in ['present', 'absent']
     fail_msg: >-
-      Every ops_postgres user needs a safe name, supported state, and a conspicuously synthetic
-      LAB_ONLY_*_DO_NOT_REUSE password.
+      Every ops_postgres user needs a safe name, supported state, and a non-empty
+      password from inventory or a protected secret source.
   loop: "{{ ops_postgres.users }}"
   loop_control:
     label: "{{ item.name | default('undefined') }}"
@@ -54,7 +58,7 @@
     name: "{{ ops_postgres.driver_packages[ansible_facts['os_family']] }}"
     state: present
 
-- name: Wait for the loopback PostgreSQL administrative endpoint
+- name: Wait for the PostgreSQL administrative endpoint
   ansible.builtin.wait_for:
     host: "{{ ops_postgres.login_host }}"
     port: "{{ ops_postgres.login_port }}"
@@ -71,6 +75,9 @@
     login_user: "{{ ops_postgres.login_user }}"
     login_password: "{{ ops_postgres.login_password }}"
     ssl_mode: "{{ ops_postgres.ssl_mode }}"
+    ca_cert: "{{ ops_postgres.tls.ca_cert | default(omit, true) }}"
+    ssl_cert: "{{ ops_postgres.tls.client_cert | default(omit, true) }}"
+    ssl_key: "{{ ops_postgres.tls.client_key | default(omit, true) }}"
     trust_input: false
   loop: "{{ ops_postgres.users }}"
   loop_control:
@@ -90,6 +97,9 @@
     login_user: "{{ ops_postgres.login_user }}"
     login_password: "{{ ops_postgres.login_password }}"
     ssl_mode: "{{ ops_postgres.ssl_mode }}"
+    ca_cert: "{{ ops_postgres.tls.ca_cert | default(omit, true) }}"
+    ssl_cert: "{{ ops_postgres.tls.client_cert | default(omit, true) }}"
+    ssl_key: "{{ ops_postgres.tls.client_key | default(omit, true) }}"
     trust_input: false
   loop: "{{ ops_postgres.databases }}"
   loop_control:
@@ -106,6 +116,9 @@
     login_user: "{{ ops_postgres.login_user }}"
     login_password: "{{ ops_postgres.login_password }}"
     ssl_mode: "{{ ops_postgres.ssl_mode }}"
+    ca_cert: "{{ ops_postgres.tls.ca_cert | default(omit, true) }}"
+    ssl_cert: "{{ ops_postgres.tls.client_cert | default(omit, true) }}"
+    ssl_key: "{{ ops_postgres.tls.client_key | default(omit, true) }}"
     trust_input: false
   loop: "{{ ops_postgres.users }}"
   loop_control:

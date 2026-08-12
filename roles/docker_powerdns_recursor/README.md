@@ -1,6 +1,6 @@
 # docker_powerdns_recursor
 
-Runs a PowerDNS Recursor container for disposable localhost DNS resolution tests. The role refuses remote targets and binds the resolver to a loopback-only, unprivileged DNS port.
+Runs a PowerDNS Recursor container for DNS resolution tests. The committed local inventory binds the resolver to a loopback-only, unprivileged DNS port. Inventory may choose another explicit bind address, but production use remains blocked until exposure, client trust, DNS encryption strategy, and operational policy are designed.
 
 ## Requirements
 
@@ -14,7 +14,6 @@ All variables live under `docker_powerdns_recursor`.
 
 ```yaml
 docker_powerdns_recursor:
-  lab_mode: true
   bind_address: 127.0.0.1
   dns:
     published_port: 5301
@@ -38,7 +37,7 @@ This is a plaintext DNS lab endpoint bound to loopback. Production use is blocke
 ## Deploy
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags docker_powerdns,docker_powerdns_recursor
 ```
 

@@ -1,18 +1,26 @@
 ---
-- name: Validate docker_atlassian_lab configuration and localhost boundary
+- name: Validate docker_atlassian_lab configuration
   ansible.builtin.assert:
     that:
       - docker_atlassian_lab is mapping
-      - docker_atlassian_lab.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - docker_atlassian_lab.bind_address in ['127.0.0.1', '::1']
+      - docker_atlassian_lab.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_atlassian_lab.project_dir is match('^/\\S+$')
+      - docker_atlassian_lab.bind_address | length > 0
       - docker_atlassian_lab.jira.https_port | int >= 1024
       - docker_atlassian_lab.jira.https_port | int <= 65535
       - docker_atlassian_lab.confluence.https_port | int >= 1024
       - docker_atlassian_lab.confluence.https_port | int <= 65535
       - docker_atlassian_lab.jira.https_port | int != docker_atlassian_lab.confluence.https_port | int
-      - docker_atlassian_lab.database.jira.password == 'LAB_ONLY_JIRA_DB_PASSWORD_DO_NOT_REUSE'
-      - docker_atlassian_lab.database.confluence.password == 'LAB_ONLY_CONFLUENCE_DB_PASSWORD_DO_NOT_REUSE'
+      - docker_atlassian_lab.database.jira.password | length >= 16
+      - docker_atlassian_lab.database.confluence.password | length >= 16
+      - docker_atlassian_lab.database.jira.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - docker_atlassian_lab.database.confluence.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - >-
+        not (
+          docker_atlassian_lab.database.jira.password is match('^LAB_ONLY_')
+          or docker_atlassian_lab.database.confluence.password is match('^LAB_ONLY_')
+        )
+        or docker_atlassian_lab.bind_address in ['127.0.0.1', '::1']
       - docker_atlassian_lab.database.jira.host | length > 0
       - docker_atlassian_lab.database.confluence.host | length > 0
       - docker_atlassian_lab.database.jira.port | int > 0
@@ -22,14 +30,18 @@
       - docker_atlassian_lab.jira.image is not search(':latest$')
       - docker_atlassian_lab.confluence.image is not search(':latest$')
       - docker_atlassian_lab.proxy.image is not search(':latest$')
+      - docker_atlassian_lab.pki.dir is match('^/\\S+$')
       - docker_atlassian_lab.pki.leaf_validity_days | int <= 397
       - docker_atlassian_lab.pki.renew_before_days | int > 0
       - docker_atlassian_lab.pki.renew_before_days | int < docker_atlassian_lab.pki.leaf_validity_days | int
+      - docker_atlassian_lab.pki.subject_alt_names is sequence
+      - docker_atlassian_lab.pki.subject_alt_names | length > 0
     fail_msg: >-
-      docker_atlassian_lab is a disposable localhost-only role. It requires lab_mode=true,
-      a loopback ansible_host and bind address, pinned images, a declared external PostgreSQL
-      network, the built-in synthetic database passwords, distinct unprivileged HTTPS ports,
-      and a leaf certificate valid for at most 397 days.
+      docker_atlassian_lab requires explicit inventory settings, pinned images,
+      database credentials, a declared external PostgreSQL network, distinct
+      unprivileged HTTPS ports, and a leaf certificate valid for at most 397
+      days. Synthetic LAB_ONLY credentials may only be published on loopback.
+  no_log: true
 
 - name: Ensure Atlassian lab project and data directories exist
   ansible.builtin.file:
@@ -137,15 +149,15 @@
 - name: Check for an existing Atlassian lab TLS certificate
   ansible.builtin.stat:
     path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.crt"
-  register: atlassian_lab_leaf_certificate
+  register: docker_atlassian_lab_leaf_certificate
 
 - name: Inspect Atlassian lab TLS certificate renewal window
   community.crypto.x509_certificate_info:
     path: "{{ docker_atlassian_lab.pki.dir }}/atlassian-lab.crt"
     valid_at:
       renewal_window: "+{{ docker_atlassian_lab.pki.renew_before_days }}d"
-  register: atlassian_lab_leaf_certificate_info
-  when: atlassian_lab_leaf_certificate.stat.exists
+  register: docker_atlassian_lab_leaf_certificate_info
+  when: docker_atlassian_lab_leaf_certificate.stat.exists
 
 - name: Issue or renew Atlassian lab TLS certificate
   community.crypto.x509_certificate:
@@ -157,8 +169,8 @@
     ownca_not_after: "+{{ docker_atlassian_lab.pki.leaf_validity_days }}d"
     force: >-
       {{
-        (not atlassian_lab_leaf_certificate.stat.exists)
-        or (not (atlassian_lab_leaf_certificate_info.valid_at.renewal_window | default(false)))
+        (not docker_atlassian_lab_leaf_certificate.stat.exists)
+        or (not (docker_atlassian_lab_leaf_certificate_info.valid_at.renewal_window | default(false)))
       }}
     owner: root
     group: root

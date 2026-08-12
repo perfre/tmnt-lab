@@ -1,6 +1,6 @@
 # docker_poweradmin
 
-Runs the official Poweradmin container behind an Nginx TLS proxy. This role is localhost-lab only: it refuses remote targets, binds HTTPS to `127.0.0.1`, uses synthetic credentials, creates a disposable local CA, and connects to PowerDNS through the internal API network owned by `docker_powerdns`.
+Runs the official Poweradmin container behind an Nginx TLS proxy. The committed local inventory binds HTTPS to `127.0.0.1`, uses synthetic credentials, creates a disposable local CA, and connects to PowerDNS through the internal API network owned by `docker_powerdns`. Synthetic `LAB_ONLY_*` credentials may only be used with loopback publishing.
 
 ## Requirements
 
@@ -15,7 +15,6 @@ All variables live under `docker_poweradmin`.
 
 ```yaml
 docker_poweradmin:
-  lab_mode: true
   bind_address: 127.0.0.1
   web:
     publish: true
@@ -49,7 +48,7 @@ The Nginx proxy allows TLS 1.2 and 1.3. Import only the generated public CA into
 ## Deploy
 
 ```bash
-ansible-playbook -i inventory-local/hosts.yml services.yml \
+/usr/local/bin/deploy services.yml \
   --tags docker_mariadb,ops_mariadb,docker_powerdns,docker_poweradmin
 ```
 
@@ -59,6 +58,8 @@ Open:
 - `https://poweradmin.localhost:8445`
 
 The initial lab administrator is `admin` with the synthetic password from inventory. Replace it inside the lab UI if you keep the disposable environment for more than a quick test.
+
+Production use remains blocked until real secrets, database TLS, PowerDNS API trust, certificate trust, schema migration, and backup/restore expectations are supplied by inventory and verified.
 
 ## Verification
 

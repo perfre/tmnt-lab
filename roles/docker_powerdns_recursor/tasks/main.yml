@@ -1,14 +1,13 @@
 ---
-- name: Validate docker_powerdns_recursor localhost lab configuration
+- name: Validate docker_powerdns_recursor configuration
   ansible.builtin.assert:
     that:
       - docker_powerdns_recursor is mapping
-      - docker_powerdns_recursor.lab_mode | bool
-      - (ansible_host | default(inventory_hostname)) in ['localhost', '127.0.0.1', '::1']
-      - docker_powerdns_recursor.bind_address in ['127.0.0.1', '::1']
+      - docker_powerdns_recursor.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_powerdns_recursor.project_dir is match('^/\\S+$')
+      - docker_powerdns_recursor.bind_address | length > 0
       - docker_powerdns_recursor.image is not search(':latest$')
-      - docker_powerdns_recursor.project_dir | length > 0
-      - docker_powerdns_recursor.config_file | length > 0
+      - docker_powerdns_recursor.config_file is match('^/\\S+$')
       - docker_powerdns_recursor.dns.container_port | int >= 1024
       - docker_powerdns_recursor.dns.container_port | int <= 65535
       - docker_powerdns_recursor.dns.published_port | int >= 1024
@@ -20,9 +19,9 @@
       - (not docker_powerdns_recursor.authoritative_network.enabled | bool) or (docker_powerdns_recursor.authoritative_network.name | length > 0)
       - docker_powerdns_recursor.forward_zones is sequence
     fail_msg: >-
-      docker_powerdns_recursor currently supports disposable localhost lab deployments only.
-      Keep lab_mode enabled, target loopback, pin the image, and publish only
-      unprivileged resolver ports to loopback.
+      docker_powerdns_recursor requires explicit inventory settings, a pinned
+      image, unprivileged resolver ports, DNSSEC policy, and declared forwarding
+      networks when authoritative forwarding is enabled.
 
 - name: Validate PowerDNS recursor forward zones
   ansible.builtin.assert:

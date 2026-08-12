@@ -11,8 +11,6 @@ docker_powerdns_recursor:  # noqa: var-naming[no-role-prefix]
   wait_timeout: 120
   restart: unless-stopped
 
-  # This first recursor role is intentionally localhost-lab only.
-  lab_mode: true
   bind_address: 127.0.0.1
   image: docker.io/powerdns/pdns-recursor-54:5.4.5
   timezone: Europe/Stockholm
