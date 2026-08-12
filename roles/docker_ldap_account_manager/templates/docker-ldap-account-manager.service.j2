@@ -1,0 +1,16 @@
+[Unit]
+Description=LDAP Account Manager Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_ldap_account_manager.project_dir }}
+ExecStart={{ docker_ldap_account_manager.docker_binary }} compose -f {{ docker_ldap_account_manager.project_dir }}/compose.yml up -d --pull {{ docker_ldap_account_manager.pull_policy }} --remove-orphans
+ExecStop={{ docker_ldap_account_manager.docker_binary }} compose -f {{ docker_ldap_account_manager.project_dir }}/compose.yml down
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target

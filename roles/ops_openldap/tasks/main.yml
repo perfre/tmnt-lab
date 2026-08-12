@@ -1,0 +1,373 @@
+---
+- name: Validate ops_openldap configuration
+  ansible.builtin.assert:
+    that:
+      - ops_openldap is mapping
+      - ops_openldap.server_uri is match('^(ldap|ldaps)://[^/]+(:[0-9]+)?$')
+      - ops_openldap.start_tls is boolean
+      - ops_openldap.validate_certs is boolean
+      - ops_openldap.allow_plaintext is boolean
+      - ops_openldap.server_uri is match('^ldaps://') or ops_openldap.start_tls | bool or ops_openldap.allow_plaintext | bool
+      - not (ops_openldap.server_uri is match('^ldaps://') or ops_openldap.start_tls | bool) or ops_openldap.validate_certs | bool
+      - not (ops_openldap.server_uri is match('^ldaps://') or ops_openldap.start_tls | bool) or ops_openldap.ca_path | length > 0
+      - ops_openldap.bind_dn is search(',' ~ (ops_openldap.base_dn | regex_escape) ~ '$')
+      - ops_openldap.bind_password | length >= 16
+      - ops_openldap.bind_password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - ops_openldap.base_dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - ops_openldap.base.object_classes is sequence
+      - ops_openldap.base.object_classes | length > 0
+      - ops_openldap.base.attributes is mapping
+      - ops_openldap.organizational_units is sequence
+      - ops_openldap.extra_entries is sequence
+      - ops_openldap.users is sequence
+      - ops_openldap.groups is sequence
+      - ansible_facts["os_family"] in ops_openldap.driver_packages
+    fail_msg: >-
+      ops_openldap requires an inventory-defined connection, verified LDAPS or
+      StartTLS unless allow_plaintext is explicitly true, bind credentials, base
+      object, and lists of OUs, entries, users, and groups.
+  no_log: true
+
+- name: Validate OpenLDAP organizational units
+  ansible.builtin.assert:
+    that:
+      - item.name is defined or item.dn is defined
+      - (item.dn | default('ou=' ~ item.name ~ ',' ~ ops_openldap.base_dn)) is search(',' ~ (ops_openldap.base_dn | regex_escape) ~ '$')
+      - item.attributes is mapping
+      - item.state | default('present') in ['present', 'absent']
+    fail_msg: "Every OpenLDAP organizational unit needs a DN or name, attributes, and a supported state."
+  loop: "{{ ops_openldap.organizational_units }}"
+  loop_control:
+    label: "{{ item.dn | default(item.name | default('undefined')) }}"
+
+- name: Validate OpenLDAP extra entries
+  ansible.builtin.assert:
+    that:
+      - item.dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - item.dn is search(',' ~ (ops_openldap.base_dn | regex_escape) ~ '$')
+      - item.object_classes is sequence
+      - item.object_classes | length > 0
+      - item.attributes is mapping
+      - item.state | default('present') in ['present', 'absent']
+    fail_msg: "Every OpenLDAP extra entry needs a DN below the base DN, object classes, attributes, and a supported state."
+  loop: "{{ ops_openldap.extra_entries }}"
+  loop_control:
+    label: "{{ item.dn | default('undefined') }}"
+
+- name: Validate OpenLDAP users
+  ansible.builtin.assert:
+    that:
+      - item.uid is defined or item.dn is defined
+      - (item.dn | default('uid=' ~ item.uid ~ ',' ~ ops_openldap.users_ou_dn)) is search(',' ~ (ops_openldap.base_dn | regex_escape) ~ '$')
+      - item.attributes is mapping
+      - item.state | default('present') in ['present', 'absent']
+      - (item.password | default('') | length == 0) or item.password_hash_salt | default('') is match('^[./0-9A-Za-z]{8,16}$')
+      - item.password | default('') not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+    fail_msg: "Every OpenLDAP user needs a DN or uid, attributes, supported state, and safe password hash inputs when setting a password."
+  loop: "{{ ops_openldap.users }}"
+  loop_control:
+    label: "{{ item.dn | default(item.uid | default('undefined')) }}"
+  no_log: true
+
+- name: Validate OpenLDAP groups
+  ansible.builtin.assert:
+    that:
+      - item.cn is defined or item.dn is defined
+      - (item.dn | default('cn=' ~ item.cn ~ ',' ~ ops_openldap.groups_ou_dn)) is search(',' ~ (ops_openldap.base_dn | regex_escape) ~ '$')
+      - item.attributes is mapping
+      - item.state | default('present') in ['present', 'absent']
+      - >-
+        'groupOfNames' not in (item.object_classes | default(ops_openldap.group_defaults.object_classes))
+        or (item.attributes.member is defined and item.attributes.member | length > 0)
+    fail_msg: "Every OpenLDAP group needs a DN or cn, attributes, supported state, and at least one member when using groupOfNames."
+  loop: "{{ ops_openldap.groups }}"
+  loop_control:
+    label: "{{ item.dn | default(item.cn | default('undefined')) }}"
+
+- name: Install OpenLDAP Python driver
+  ansible.builtin.package:
+    name: "{{ ops_openldap.driver_packages[ansible_facts['os_family']] }}"
+    state: present
+
+- name: Wait for the OpenLDAP endpoint
+  ansible.builtin.wait_for:
+    host: "{{ ops_openldap.wait.host }}"
+    port: "{{ ops_openldap.wait.port }}"
+    timeout: "{{ ops_openldap.wait.timeout }}"
+
+- name: Reconcile OpenLDAP base entry
+  community.general.ldap_entry:
+    dn: "{{ ops_openldap.base_dn }}"
+    objectClass: "{{ ops_openldap.base.object_classes }}"
+    attributes: "{{ ops_openldap.base.attributes }}"
+    state: present
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  when: ops_openldap.apply | bool
+  no_log: true
+
+- name: Reconcile OpenLDAP base attributes
+  community.general.ldap_attrs:
+    dn: "{{ ops_openldap.base_dn }}"
+    attributes: "{{ ops_openldap.base.attributes }}"
+    state: exact
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  when: ops_openldap.apply | bool
+  no_log: true
+
+- name: Reconcile OpenLDAP organizational unit entries
+  community.general.ldap_entry:
+    dn: "{{ item.dn | default('ou=' ~ item.name ~ ',' ~ ops_openldap.base_dn) }}"
+    objectClass: "{{ item.object_classes | default(['top', 'organizationalUnit']) }}"
+    attributes: "{{ item.attributes }}"
+    state: "{{ item.state | default('present') }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.organizational_units }}"
+  loop_control:
+    label: "{{ item.dn | default(item.name) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Reconcile OpenLDAP organizational unit attributes
+  community.general.ldap_attrs:
+    dn: "{{ item.dn | default('ou=' ~ item.name ~ ',' ~ ops_openldap.base_dn) }}"
+    attributes: "{{ item.attributes }}"
+    state: exact
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.organizational_units }}"
+  loop_control:
+    label: "{{ item.dn | default(item.name) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Reconcile OpenLDAP extra entries
+  community.general.ldap_entry:
+    dn: "{{ item.dn }}"
+    objectClass: "{{ item.object_classes }}"
+    attributes: "{{ item.attributes }}"
+    state: "{{ item.state | default('present') }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.extra_entries }}"
+  loop_control:
+    label: "{{ item.dn }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Reconcile OpenLDAP extra entry attributes
+  community.general.ldap_attrs:
+    dn: "{{ item.dn }}"
+    attributes: "{{ item.attributes }}"
+    state: exact
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.extra_entries }}"
+  loop_control:
+    label: "{{ item.dn }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Reconcile OpenLDAP user entries
+  community.general.ldap_entry:
+    dn: "{{ item.dn | default('uid=' ~ item.uid ~ ',' ~ ops_openldap.users_ou_dn) }}"
+    objectClass: "{{ item.object_classes | default(ops_openldap.user_defaults.object_classes) }}"
+    attributes: >-
+      {{
+        item.attributes | combine(
+          (item.password_hash | default('') | length > 0)
+          | ternary(
+              {'userPassword': item.password_hash},
+              (item.password | default('') | length > 0)
+              | ternary({'userPassword': '{CRYPT}' ~ (item.password | password_hash(hashtype='sha512', salt=item.password_hash_salt))}, {})
+            )
+        )
+      }}
+    state: "{{ item.state | default('present') }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.users }}"
+  loop_control:
+    label: "{{ item.dn | default(item.uid) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+  diff: false
+
+- name: Reconcile OpenLDAP user attributes
+  community.general.ldap_attrs:
+    dn: "{{ item.dn | default('uid=' ~ item.uid ~ ',' ~ ops_openldap.users_ou_dn) }}"
+    attributes: >-
+      {{
+        item.attributes | combine(
+          (item.password_hash | default('') | length > 0)
+          | ternary(
+              {'userPassword': item.password_hash},
+              (item.password | default('') | length > 0)
+              | ternary({'userPassword': '{CRYPT}' ~ (item.password | password_hash(hashtype='sha512', salt=item.password_hash_salt))}, {})
+            )
+        )
+      }}
+    state: exact
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.users }}"
+  loop_control:
+    label: "{{ item.dn | default(item.uid) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+  diff: false
+
+- name: Reconcile OpenLDAP group entries
+  community.general.ldap_entry:
+    dn: "{{ item.dn | default('cn=' ~ item.cn ~ ',' ~ ops_openldap.groups_ou_dn) }}"
+    objectClass: "{{ item.object_classes | default(ops_openldap.group_defaults.object_classes) }}"
+    attributes: "{{ item.attributes }}"
+    state: "{{ item.state | default('present') }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.groups }}"
+  loop_control:
+    label: "{{ item.dn | default(item.cn) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Reconcile OpenLDAP group attributes
+  community.general.ldap_attrs:
+    dn: "{{ item.dn | default('cn=' ~ item.cn ~ ',' ~ ops_openldap.groups_ou_dn) }}"
+    attributes: "{{ item.attributes }}"
+    state: exact
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.groups }}"
+  loop_control:
+    label: "{{ item.dn | default(item.cn) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Remove explicitly absent OpenLDAP groups
+  community.general.ldap_entry:
+    dn: "{{ item.dn | default('cn=' ~ item.cn ~ ',' ~ ops_openldap.groups_ou_dn) }}"
+    state: absent
+    recursive: "{{ item.recursive | default(false) | bool }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.groups }}"
+  loop_control:
+    label: "{{ item.dn | default(item.cn) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'absent'
+  no_log: true
+
+- name: Remove explicitly absent OpenLDAP users
+  community.general.ldap_entry:
+    dn: "{{ item.dn | default('uid=' ~ item.uid ~ ',' ~ ops_openldap.users_ou_dn) }}"
+    state: absent
+    recursive: "{{ item.recursive | default(false) | bool }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.users }}"
+  loop_control:
+    label: "{{ item.dn | default(item.uid) }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'absent'
+  no_log: true
+
+- name: Remove explicitly absent OpenLDAP extra entries
+  community.general.ldap_entry:
+    dn: "{{ item.dn }}"
+    state: absent
+    recursive: "{{ item.recursive | default(false) | bool }}"
+    server_uri: "{{ ops_openldap.server_uri }}"
+    start_tls: "{{ ops_openldap.start_tls | bool }}"
+    validate_certs: "{{ ops_openldap.validate_certs | bool }}"
+    ca_path: "{{ ops_openldap.ca_path | default(omit, true) }}"
+    bind_dn: "{{ ops_openldap.bind_dn }}"
+    bind_pw: "{{ ops_openldap.bind_password }}"
+    referrals_chasing: "{{ ops_openldap.referrals_chasing }}"
+  loop: "{{ ops_openldap.extra_entries }}"
+  loop_control:
+    label: "{{ item.dn }}"
+  when:
+    - ops_openldap.apply | bool
+    - item.state | default('present') == 'absent'
+  no_log: true

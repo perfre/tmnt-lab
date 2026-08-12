@@ -1,0 +1,21 @@
+FROM {{ docker_openldap.base_image }}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      ldap-utils \
+      openssl \
+      slapd \
+      tini \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /etc/ldap/tls /run/slapd /var/lib/ldap \
+    && chown -R openldap:openldap /run/slapd /var/lib/ldap
+
+COPY entrypoint.sh /usr/local/bin/tmnt-openldap-entrypoint
+RUN chmod 0755 /usr/local/bin/tmnt-openldap-entrypoint
+
+EXPOSE {{ docker_openldap.ldap.container_port }} {{ docker_openldap.ldaps.container_port }}
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/tmnt-openldap-entrypoint"]

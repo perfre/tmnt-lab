@@ -1,0 +1,95 @@
+---
+name: "{{ docker_openldap.project_name }}"
+
+networks:
+  ldap:
+    name: "{{ docker_openldap.network.name }}"
+    driver: bridge
+    internal: {{ docker_openldap.network.internal | ternary('true', 'false') }}
+
+services:
+  openldap:
+    image: "{{ docker_openldap.image_name }}"
+    build:
+      context: ./image
+{% if docker_openldap.container_name | length > 0 %}
+    container_name: "{{ docker_openldap.container_name }}"
+{% endif %}
+    hostname: "{{ docker_openldap.hostname }}"
+    restart: "{{ docker_openldap.restart }}"
+    pull_policy: "{{ docker_openldap.pull_policy }}"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_openldap.timezone }}"
+      LDAP_URLS: >-
+        {% if docker_openldap.ldap.enabled | bool %}ldap://0.0.0.0:{{ docker_openldap.ldap.container_port }} {% endif %}{% if docker_openldap.ldaps.enabled | bool %}ldaps://0.0.0.0:{{ docker_openldap.ldaps.container_port }} {% endif %}ldapi:///
+      LDAP_LOG_LEVEL: "0"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          LDAPTLS_CACERT=/etc/ldap/tls/ca.crt
+          ldapsearch -H ldaps://127.0.0.1:{{ docker_openldap.ldaps.container_port }}
+          -x -s base -b "" namingContexts >/dev/null
+      start_period: 20s
+      interval: 30s
+      timeout: 5s
+      retries: 10
+    networks:
+      ldap:
+        aliases:
+          - "{{ docker_openldap.network.alias }}"
+{% if docker_openldap.ldap.publish | bool or docker_openldap.ldaps.publish | bool %}
+    ports:
+{% if docker_openldap.ldap.publish | bool %}
+      - name: openldap-ldap
+        target: {{ docker_openldap.ldap.container_port }}
+        published: {{ docker_openldap.ldap.published_port }}
+        host_ip: "{{ docker_openldap.ldap.bind_address }}"
+        protocol: tcp
+{% endif %}
+{% if docker_openldap.ldaps.publish | bool %}
+      - name: openldap-ldaps
+        target: {{ docker_openldap.ldaps.container_port }}
+        published: {{ docker_openldap.ldaps.published_port }}
+        host_ip: "{{ docker_openldap.ldaps.bind_address }}"
+        protocol: tcp
+{% endif %}
+{% endif %}
+    volumes:
+      - type: bind
+        source: "{{ docker_openldap.data_dir }}"
+        target: /var/lib/ldap
+      - type: bind
+        source: "{{ docker_openldap.config_dir }}/slapd.conf"
+        target: /etc/ldap/slapd.conf
+        read_only: true
+      - type: bind
+        source: "{{ docker_openldap_tls_ca_file }}"
+        target: /etc/ldap/tls/ca.crt
+        read_only: true
+      - type: bind
+        source: "{{ docker_openldap_tls_cert_file }}"
+        target: /etc/ldap/tls/server.crt
+        read_only: true
+      - type: bind
+        source: "{{ docker_openldap_tls_key_file }}"
+        target: /etc/ldap/tls/server.key
+        read_only: true
+    tmpfs:
+      - /run/slapd:rw,noexec,nosuid,size=16m,uid={{ docker_openldap.run_uid }},gid={{ docker_openldap.run_gid }}
+      - /tmp:rw,noexec,nosuid,size=64m
+    mem_limit: "{{ docker_openldap.resources.memory_limit }}"
+    cpus: "{{ docker_openldap.resources.cpus }}"
+    pids_limit: {{ docker_openldap.resources.pids_limit }}
+    logging:
+      driver: "{{ docker_openldap.logging.driver }}"
+      options:
+{% for key, value in docker_openldap.logging.options.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}

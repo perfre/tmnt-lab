@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: docker_ldap_account_manager
+  author: tmnt-lab
+  description: Run LDAP Account Manager behind a TLS proxy using Docker Compose.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

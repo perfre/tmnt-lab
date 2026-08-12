@@ -1,0 +1,7 @@
+---
+- name: Restart docker openldap compose
+  ansible.builtin.systemd:
+    name: docker-openldap
+    state: restarted
+    daemon_reload: true
+  when: docker_openldap.apply | bool

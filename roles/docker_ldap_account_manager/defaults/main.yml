@@ -1,0 +1,74 @@
+---
+docker_ldap_account_manager:  # noqa: var-naming[no-role-prefix]
+  project_name: ldap-account-manager
+  project_dir: /opt/docker/ldap-account-manager
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 180
+  restart: unless-stopped
+
+  image: ghcr.io/ldapaccountmanager/lam:9.6@sha256:9e0aefbc61323686d30b1385a8557fb4d428a33343ed267e87d9556fcd5b437c
+  run_uid: "33"
+  run_gid: "33"
+  timezone: UTC
+
+  config_dir: /opt/docker/ldap-account-manager/config
+  main_config_dir: /opt/docker/ldap-account-manager/main-config
+  secrets_dir: /opt/docker/ldap-account-manager/secrets
+
+  ldap:
+    server_url: ldaps://openldap:1636
+    base_dn: dc=example,dc=org
+    users_dn: ou=people,dc=example,dc=org
+    groups_dn: ou=groups,dc=example,dc=org
+    bind_dn: cn=admin,dc=example,dc=org
+    ca_path: ""
+    validate_certs: true
+    network:
+      name: tmnt_openldap
+      external: true
+
+  configuration:
+    preconfigure: true
+    password: ""
+    language: en_US
+
+  web:
+    publish: false
+    bind_address: 127.0.0.1
+    hostname: lam.localhost
+    https_port: 8446
+    tls:
+      ca_path: ""
+      cert_path: ""
+      key_path: ""
+      pki_dir: /opt/docker/ldap-account-manager/pki
+      ca_common_name: tmnt LAM local CA
+      leaf_common_name: lam.localhost
+      leaf_validity_days: 397
+      renew_before_days: 30
+      subject_alt_names:
+        - DNS:lam.localhost
+        - DNS:localhost
+        - IP:127.0.0.1
+
+  proxy:
+    image: docker.io/library/nginx:1.28.0-alpine
+    memory_limit: 256m
+    cpus: "0.5"
+    pids_limit: 128
+
+  resources:
+    memory_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256
+
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"

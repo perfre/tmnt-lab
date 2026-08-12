@@ -32,6 +32,18 @@
     - role: ops_postgres
       tags: [ops_postgres]
 
+- name: Deploy OpenLDAP directory stack
+  hosts: ldap
+  become: true
+  gather_facts: true
+  roles:
+    - role: docker_openldap
+      tags: [docker_openldap]
+    - role: ops_openldap
+      tags: [ops_openldap]
+    - role: docker_ldap_account_manager
+      tags: [docker_ldap_account_manager]
+
 - hosts: ollama_server
   become: true
   gather_facts: true

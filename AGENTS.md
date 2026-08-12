@@ -2,7 +2,7 @@
 
 ## Mission and scope
 
-Maintain this repository as an idempotent Ansible deployment for containerized lab services. Docker Compose is the runtime contract, and narrowly scoped Ansible roles are the only supported deployment mechanism.
+Maintain this repository as an idempotent Ansible deployment for containerized lab and production-capable services. Docker Compose is the runtime contract, and narrowly scoped Ansible roles are the only supported deployment mechanism.
 
 Security is a design requirement. New and changed services must use authenticated encryption, least privilege, explicit trust, and secret-safe configuration by default. This baseline improves security posture but does not by itself certify the repository against a regulatory framework.
 
@@ -11,7 +11,7 @@ These instructions apply to the whole repository. If a future subdirectory adds 
 ## Existing layout and conventions
 
 - `services.yml` is the deployment entry point and maps inventory groups to roles.
-- `inventory-local/` is lab inventory, not a secret store.
+- `inventory-local/` is a disposable localhost inventory profile, not a secret store or a special deployment mode.
 - `roles/service_docker` owns Docker Engine installation and daemon configuration.
 - Each `roles/docker_<service>` role owns one Compose project, including defaults, validation, rendered configuration, a Compose template, a systemd unit, handlers, metadata, and role documentation.
 - Role inputs are namespaced beneath a single mapping named after the role, such as `docker_netbox`.
@@ -80,15 +80,16 @@ Add the role to the correct inventory group in `services.yml` with a same-named 
 
 Shared resources such as an external Docker network or PKI trust bundle require an explicit owner. Consumers may reference them through documented variables but must not recreate, rotate, or delete them implicitly. Destructive migrations and certificate-authority rotation require a documented migration and rollback path.
 
-`inventory-local/hosts.yml` is the canonical disposable-lab database bootstrap manifest. When a system gains or loses a relational backend, update the matching `ops_mariadb` or `ops_postgres` user/database entries and the application's connection variables in that same change. The database runtime role must execute before its operations role, and both must execute before consumers. Conspicuously synthetic `LAB_ONLY_*_DO_NOT_REUSE` values are permitted in this manifest solely for localhost lab mode; real credentials remain prohibited.
+`inventory-local/hosts.yml` is the canonical disposable localhost bootstrap profile. When a system gains or loses a relational backend, update the matching `ops_mariadb` or `ops_postgres` user/database entries and the application's connection variables in that same change. The database runtime role must execute before its operations role, and both must execute before consumers. Conspicuously synthetic `LAB_ONLY_*_DO_NOT_REUSE` values are permitted in this committed profile; real credentials remain prohibited in committed inventory.
 
 Current architectural decisions:
 
-- Keep one deployment playbook, `services.yml`, and express lab versus production behavior through separate inventories; do not fork near-duplicate lab and production playbooks.
+- Keep one deployment playbook, `services.yml`, and express lab, staging, and production behavior through inventory variables; do not fork near-duplicate lab and production playbooks.
+- Roles must be production-capable through inventory configuration. Do not hard-code localhost-only assertions, lab-only credentials, or mandatory lab modes into new roles. Inventory may choose localhost bindings, generated local certificates, synthetic credentials, external certificate paths, Vault values, uncommitted secret variables, published ports, or internal-only networks according to the target profile.
 - Separate stateful service runtimes from their operational content. Database containers live in `docker_mariadb`/`docker_postgres`, database users and schemas in `ops_mariadb`/`ops_postgres`, the Ollama runtime in `docker_ollama_server`, and model lifecycle in `ops_ollama_models`.
-- Keep shared database application networks internal. When an operations role needs host-side administrative TCP, expose it through a separate database-owned admin network and bind lab listeners to loopback; production exposure still requires verified TLS and approved secret handling before relaxing lab assertions.
+- Keep shared database application networks internal by default. When an operations role needs host-side administrative TCP, expose it through an explicitly configured database-owned admin network and bind address. Production exposure requires verified TLS, authenticated access, and inventory-supplied secret handling.
 - Use NVIDIA Container Device Interface (CDI) as the GPU contract. `service_docker` owns NVIDIA Container Toolkit installation and CDI refresh, never the physical-host GPU driver. GPU consumers request explicit `nvidia.com/gpu=...` devices.
-- Never expose Ollama's unauthenticated API directly in production. Lab mode may publish it on loopback; production attaches it to a separately owned authenticated TLS ingress network.
+- Never expose Ollama's unauthenticated API directly in production. A localhost inventory profile may publish it on loopback; production attaches it to a separately owned authenticated TLS ingress network.
 
 ## Local PKI and TLS baseline
 
@@ -117,34 +118,27 @@ Bind a TLS endpoint directly in the application when it is well supported. Other
 
 Mutual TLS is required for privileged machine-to-machine administration and secret-management interfaces unless the product provides an equally strong, documented identity mechanism. Certificate rotation must not require rebuilding an image.
 
-## Localhost lab mode
+## Inventory-defined deployment profiles
 
-Roles may expose an explicit `<role_name>.lab_mode` for disposable testing without Ansible Vault. Lab mode is an exception profile, not a production compatibility mode, and must never be inferred automatically.
+Roles must treat inventory as the source of deployment policy. A localhost lab, a private staging service, and a production service should use the same role with different inventory values for bind addresses, published ports, certificate paths, generated certificate settings, networks, resource limits, credentials, and operational objects.
 
-When `lab_mode: true`, the role must:
+Committed lab inventories may use generated local certificates and conspicuously synthetic `LAB_ONLY_*_DO_NOT_REUSE` values. Those values are examples only and must not be represented as production credentials. Production inventories should provide real values through Ansible Vault, an approved external secret manager, an uncommitted inventory, secure extra vars, or another documented secret source chosen by the operator.
 
-- assert that `ansible_host` resolves explicitly to `localhost`, `127.0.0.1`, or `::1`, or that an equivalent local connection is provably in use;
-- bind every published TCP/UDP port to a loopback address, never `0.0.0.0` or a LAN interface;
-- use only generated throwaway secrets or conspicuously synthetic, role-specific lab values that cannot be mistaken for real credentials;
-- reject user-supplied production-looking credentials and document that lab credentials must never be reused;
-- keep backends on internal Compose networks and retain the normal least-privilege container controls;
-- generate a disposable local CA and leaf certificates on the target when TLS is needed, protect their private keys, and never reuse that CA outside the lab deployment;
-- keep secret-bearing output redacted with `no_log`/`diff: false` even though the credentials are synthetic;
-- label data, certificates, accounts, and licenses as disposable and provide a clear teardown/reset procedure.
+Do not add role assertions that merely prove a host is localhost. Instead, validate the actual safety contract selected in inventory: TLS is enabled when a protocol supports it, certificate verification is not disabled, published ports have explicit bind addresses, required secrets are non-empty and not known placeholders, host paths are absolute, destructive behavior is opt-in, and mutually dependent settings are complete.
 
-Lab mode may avoid Vault, external secret managers, public DNS, and a production PKI, but it may not disable TLS verification, use real credentials, publish services beyond loopback, bypass product licensing, or weaken the non-lab defaults. If the localhost condition is not satisfied, fail before creating files or containers.
+Generated local PKI is allowed as an inventory-selected certificate source. It must still use modern key types, correct SANs/EKUs, restricted private-key permissions, short-lived leaf certificates, renewal before expiry, read-only mounts, and CA-validated clients. When inventory supplies certificate host paths, roles must consume those paths without recreating or rotating the external PKI.
 
 ## Secrets and sensitive data
 
 - Never commit real passwords, tokens, private keys, recovery keys, unseal material, SNMP credentials, or Ansible connection credentials.
 - Defaults must use empty values or unmistakable invalid placeholders. Assert that required secrets are present and reject known placeholders before deployment.
-- Source secrets from Ansible Vault or an approved external secret manager. Commit only encrypted Vault data, public certificates, and non-sensitive examples.
+- Source real secrets from Ansible Vault, an approved external secret manager, an uncommitted inventory, secure extra vars, or another documented operator-controlled secret source. Commit only encrypted Vault data, public certificates, conspicuously synthetic placeholders, and non-sensitive examples.
 - Prefer Compose secrets and application `_FILE` settings. Environment variables are a fallback because they can be exposed by container inspection.
 - Render unavoidable secret files as `root:root` mode `0600`; use `0640` only when a documented runtime group needs access. Never render secret-bearing files as `0644`.
 - Keep secret values out of Compose labels, image build arguments, Dockerfiles, URLs, shell command lines, and systemd unit text.
 - Add `no_log: true` at the smallest task boundary that reliably prevents disclosure. Do not apply it so broadly that ordinary failures become impossible to diagnose.
 - Use separate credentials per service and per trust boundary. Grant only the database, API, or filesystem permissions required by that consumer.
-- Do not place credentials in `inventory-local/hosts.yml`. Local convenience does not make a committed secret safe.
+- Do not place real credentials in `inventory-local/hosts.yml`. Local convenience does not make a committed secret safe.
 
 ## Docker Compose security baseline
 
@@ -191,7 +185,7 @@ ansible-lint .
 
 If `ansible-lint` is unavailable, report that rather than claiming it passed. For a changed role, also perform a check-mode run limited to a safe test host when the environment supports it. Never use check mode as proof of runtime correctness.
 
-For localhost lab role changes, test edits against the local WSL lab with the installed wrapper unless the user explicitly says not to:
+For changes that include a localhost inventory profile, test edits against the local WSL lab with the installed wrapper unless the user explicitly says not to:
 
 ```bash
 /usr/local/bin/deploy services.yml --tags <role_tag> --limit <safe-host>
@@ -222,7 +216,7 @@ Maintain a tidy root `README.md` for users who have no prior knowledge of the re
 - repository purpose and architecture;
 - prerequisites and dependency installation;
 - exact lab bootstrap, full deployment, selective-role, verification, upgrade, backup, and teardown commands;
-- production inventory and secret/PKI expectations, deployment commands, and an explicit list of roles that remain lab-only or otherwise blocked from production;
+- production inventory and secret/PKI expectations, deployment commands, and any explicit role limitations that still block production use;
 - role naming and navigation guidance;
 - ports, URLs, persistent-data locations, and the difference between runtime (`docker_*`), host service (`service_*`), and operations (`ops_*`) roles;
 - warnings before destructive actions or data migrations and pointers to the affected role README.

@@ -1,0 +1,117 @@
+---
+docker_openldap:  # noqa: var-naming[no-role-prefix]
+  project_name: openldap
+  project_dir: /opt/docker/openldap
+  docker_binary: /usr/bin/docker
+  apply: true
+  pull_policy: never
+  build: always
+  recreate: auto
+  remove_orphans: true
+  wait: true
+  wait_timeout: 180
+  restart: unless-stopped
+
+  image_name: tmnt/openldap:2.6-debian
+  base_image: docker.io/library/debian:13.1-slim@sha256:a347fd7510ee31a84387619a492ad6c8eb0af2f2682b916ff3e643eb076f925a
+  container_name: ""
+  hostname: openldap
+  timezone: UTC
+  run_uid: "100"
+  run_gid: "101"
+
+  data_dir: /opt/docker/openldap/data
+  config_dir: /opt/docker/openldap/config
+  pki_dir: /opt/docker/openldap/pki
+
+  suffix: dc=example,dc=org
+  organization: Example Directory
+  admin:
+    dn: cn=admin,dc=example,dc=org
+    password: ""
+    password_hash: ""
+    password_hash_salt: ""
+
+  schemas:
+    - core
+    - cosine
+    - nis
+    - inetorgperson
+
+  database:
+    backend: mdb
+    max_size: 1073741824
+    checkpoint_kbytes: 512
+    checkpoint_minutes: 30
+    indexes:
+      - attribute: objectClass
+        rule: eq
+      - attribute: cn,uid
+        rule: eq,pres,sub
+      - attribute: member,memberUid
+        rule: eq
+
+  memberof:
+    enabled: true
+    group_object_class: groupOfNames
+    member_attribute: member
+    memberof_attribute: memberOf
+    dangling: error
+    refint: true
+
+  refint:
+    enabled: true
+    attributes:
+      - member
+      - manager
+      - owner
+
+  access:
+    read_dn: ""
+    allow_anonymous_read: true
+
+  tls:
+    enabled: true
+    ca_path: ""
+    cert_path: ""
+    key_path: ""
+    ca_common_name: tmnt OpenLDAP local CA
+    leaf_common_name: openldap
+    leaf_validity_days: 397
+    renew_before_days: 30
+    subject_alt_names:
+      - DNS:openldap
+      - DNS:localhost
+      - IP:127.0.0.1
+    verify_client: never
+    protocol_min: "3.3"
+
+  ldap:
+    enabled: true
+    container_port: 1389
+    publish: false
+    bind_address: 127.0.0.1
+    published_port: 1389
+
+  ldaps:
+    enabled: true
+    container_port: 1636
+    publish: false
+    bind_address: 127.0.0.1
+    published_port: 1636
+
+  network:
+    name: tmnt_openldap
+    alias: openldap
+    internal: false
+
+  resources:
+    memory_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256
+
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"

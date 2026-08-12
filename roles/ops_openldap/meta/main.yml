@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: ops_openldap
+  author: tmnt-lab
+  description: Reconcile inventory-defined OpenLDAP base objects, users, groups, and entries.
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

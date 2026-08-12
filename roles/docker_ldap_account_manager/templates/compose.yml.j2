@@ -1,0 +1,149 @@
+---
+name: "{{ docker_ldap_account_manager.project_name }}"
+
+networks:
+{% if docker_ldap_account_manager.web.publish | bool %}
+  ingress:
+    driver: bridge
+{% endif %}
+  frontend:
+    driver: bridge
+    internal: true
+  ldap:
+    external: {{ docker_ldap_account_manager.ldap.network.external | ternary('true', 'false') }}
+    name: "{{ docker_ldap_account_manager.ldap.network.name }}"
+
+secrets:
+  lam_password:
+    file: ./secrets/lam-password
+
+services:
+  lam:
+    image: "{{ docker_ldap_account_manager.image }}"
+    restart: "{{ docker_ldap_account_manager.restart }}"
+    pull_policy: "{{ docker_ldap_account_manager.pull_policy }}"
+    user: "{{ docker_ldap_account_manager.run_uid }}:{{ docker_ldap_account_manager.run_gid }}"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    environment:
+      TZ: "{{ docker_ldap_account_manager.timezone }}"
+      LAM_SKIP_PRECONFIGURE: "{{ docker_ldap_account_manager.configuration.preconfigure | ternary('false', 'true') }}"
+      LAM_PASSWORD_FILE: /run/secrets/lam_password
+      LAM_LANG: "{{ docker_ldap_account_manager.configuration.language }}"
+      LDAP_SERVER: "{{ docker_ldap_account_manager.ldap.server_url }}"
+      LDAP_BASE_DN: "{{ docker_ldap_account_manager.ldap.base_dn }}"
+      LDAP_USERS_DN: "{{ docker_ldap_account_manager.ldap.users_dn }}"
+      LDAP_GROUPS_DN: "{{ docker_ldap_account_manager.ldap.groups_dn }}"
+      LDAP_USER: "{{ docker_ldap_account_manager.ldap.bind_dn }}"
+      LAM_DISABLE_TLS_CHECK: "{{ docker_ldap_account_manager.ldap.validate_certs | ternary('false', 'true') }}"
+      LAM_CONFIGURATION_DATABASE: files
+    secrets:
+      - source: lam_password
+        target: lam_password
+        uid: "{{ docker_ldap_account_manager.run_uid }}"
+        gid: "{{ docker_ldap_account_manager.run_gid }}"
+        mode: 0440
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null"]
+      start_period: 30s
+      interval: 30s
+      timeout: 5s
+      retries: 10
+    networks:
+      frontend:
+        aliases:
+          - lam
+      ldap:
+    volumes:
+      - type: bind
+        source: "{{ docker_ldap_account_manager.config_dir }}"
+        target: /var/lib/ldap-account-manager/config
+      - type: bind
+        source: "{{ docker_ldap_account_manager.main_config_dir }}"
+        target: /etc/ldap-account-manager
+      - type: bind
+        source: "{{ docker_ldap_account_manager.project_dir }}/ldap.conf"
+        target: /etc/ldap/ldap.conf
+        read_only: true
+      - type: bind
+        source: "{{ docker_ldap_account_manager.ldap.ca_path }}"
+        target: /etc/ldap/tls/ca.crt
+        read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,uid={{ docker_ldap_account_manager.run_uid }},gid={{ docker_ldap_account_manager.run_gid }}
+      - /var/lib/php/sessions:rw,noexec,nosuid,size=32m,uid={{ docker_ldap_account_manager.run_uid }},gid={{ docker_ldap_account_manager.run_gid }}
+      - /var/run/apache2:rw,noexec,nosuid,size=16m,uid={{ docker_ldap_account_manager.run_uid }},gid={{ docker_ldap_account_manager.run_gid }}
+      - /var/lock/apache2:rw,noexec,nosuid,size=16m,uid={{ docker_ldap_account_manager.run_uid }},gid={{ docker_ldap_account_manager.run_gid }}
+      - /var/log/apache2:rw,noexec,nosuid,size=16m,uid={{ docker_ldap_account_manager.run_uid }},gid={{ docker_ldap_account_manager.run_gid }}
+    mem_limit: "{{ docker_ldap_account_manager.resources.memory_limit }}"
+    cpus: "{{ docker_ldap_account_manager.resources.cpus }}"
+    pids_limit: {{ docker_ldap_account_manager.resources.pids_limit }}
+    logging:
+      driver: "{{ docker_ldap_account_manager.logging.driver }}"
+      options:
+{% for key, value in docker_ldap_account_manager.logging.options.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}
+
+  tls-proxy:
+    image: "{{ docker_ldap_account_manager.proxy.image }}"
+    restart: "{{ docker_ldap_account_manager.restart }}"
+    pull_policy: "{{ docker_ldap_account_manager.pull_policy }}"
+    user: "101:101"
+    read_only: true
+    init: true
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
+    depends_on:
+      lam:
+        condition: service_healthy
+    networks:
+{% if docker_ldap_account_manager.web.publish | bool %}
+      - ingress
+{% endif %}
+      - frontend
+{% if docker_ldap_account_manager.web.publish | bool %}
+    ports:
+      - name: lam-https
+        target: {{ docker_ldap_account_manager.web.https_port }}
+        published: {{ docker_ldap_account_manager.web.https_port }}
+        host_ip: "{{ docker_ldap_account_manager.web.bind_address }}"
+        protocol: tcp
+{% endif %}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- https://127.0.0.1:{{ docker_ldap_account_manager.web.https_port }}/nginx-health >/dev/null
+      start_period: 10s
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - type: bind
+        source: "{{ docker_ldap_account_manager.project_dir }}/nginx.conf"
+        target: /etc/nginx/nginx.conf
+        read_only: true
+      - type: bind
+        source: "{{ docker_ldap_account_manager_web_tls_ca_file }}"
+        target: /etc/ssl/certs/ca-certificates.crt
+        read_only: true
+      - type: bind
+        source: "{{ docker_ldap_account_manager_web_tls_cert_file }}"
+        target: /etc/nginx/tls/lam.crt
+        read_only: true
+      - type: bind
+        source: "{{ docker_ldap_account_manager_web_tls_key_file }}"
+        target: /etc/nginx/tls/lam.key
+        read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    mem_limit: "{{ docker_ldap_account_manager.proxy.memory_limit }}"
+    cpus: "{{ docker_ldap_account_manager.proxy.cpus }}"
+    pids_limit: {{ docker_ldap_account_manager.proxy.pids_limit }}

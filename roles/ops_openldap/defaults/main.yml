@@ -1,0 +1,61 @@
+---
+ops_openldap:  # noqa: var-naming[no-role-prefix]
+  apply: true
+  server_uri: ldaps://127.0.0.1:1636
+  start_tls: false
+  validate_certs: true
+  allow_plaintext: false
+  ca_path: ""
+  bind_dn: cn=admin,dc=example,dc=org
+  bind_password: ""
+  base_dn: dc=example,dc=org
+  wait:
+    host: 127.0.0.1
+    port: 1636
+    timeout: 120
+  referrals_chasing: disabled
+  driver_packages:
+    Debian:
+      - python3-ldap
+    RedHat:
+      - python3-ldap
+
+  base:
+    object_classes:
+      - top
+      - dcObject
+      - organization
+    attributes:
+      dc: example
+      o: Example Directory
+
+  organizational_units:
+    - name: people
+      attributes:
+        ou: people
+    - name: groups
+      attributes:
+        ou: groups
+    - name: services
+      attributes:
+        ou: services
+
+  users_ou_dn: ou=people,dc=example,dc=org
+  groups_ou_dn: ou=groups,dc=example,dc=org
+  user_defaults:
+    object_classes:
+      - top
+      - person
+      - organizationalPerson
+      - inetOrgPerson
+      - posixAccount
+      - shadowAccount
+  group_defaults:
+    object_classes:
+      - top
+      - groupOfNames
+      - posixGroup
+
+  extra_entries: []
+  users: []
+  groups: []

@@ -1,8 +1,8 @@
 # tmnt-lab
 
-`tmnt-lab` is an Ansible-managed collection of Docker Compose lab services. Ansible owns host preparation, rendered Compose projects, systemd lifecycle, persistent paths, and operational bootstrap tasks. Do not operate parallel hand-written Compose deployments for the same services.
+`tmnt-lab` is an Ansible-managed collection of Docker Compose services for disposable lab profiles and production-capable inventory profiles. Ansible owns host preparation, rendered Compose projects, systemd lifecycle, persistent paths, and operational bootstrap tasks. Do not operate parallel hand-written Compose deployments for the same services.
 
-The repository is lab-first. Some roles define a safe production contract, but the complete service collection is not yet production-ready. The production section below identifies the supported boundary and the controls that remain external.
+The repository is inventory-driven. The committed local inventory is only one localhost profile with synthetic values; production behavior is selected through separate inventory variables for secrets, PKI, bind addresses, networks, and published ports. Some older roles still have production security debt, and the production section identifies those gaps.
 
 ## Repository map
 
@@ -20,6 +20,9 @@ Runtime roles execute before their matching operations roles. For example:
 service_docker
   -> docker_ollama_server
      -> ops_ollama_models
+  -> docker_openldap
+     -> ops_openldap
+     -> docker_ldap_account_manager
 ```
 
 ## Prerequisites
@@ -99,12 +102,15 @@ ansible-playbook -K -i inventory-local/hosts.yml services.yml
 ```
 
 Before a complete deployment, read the MariaDB, PostgreSQL, LibreNMS, NetBox, Zabbix, Atlassian, PowerDNS, and Poweradmin role READMEs. The database refactor does not migrate data from older embedded database directories; application reconciliation can stop those old containers as orphans.
+Also read the OpenLDAP, OpenLDAP operations, and LDAP Account Manager READMEs before deploying the LDAP stack because those roles create directory data, TLS material, and management UI state.
 
 Deploy or check one component with tags and a limit:
 
 ```bash
 ansible-playbook -K -i inventory-local/hosts.yml services.yml \
   --tags docker_netbox --limit netbox
+ansible-playbook -K -i inventory-local/hosts.yml services.yml \
+  --tags docker_openldap,ops_openldap,docker_ldap_account_manager --limit ldap
 ansible-playbook -K -i inventory-local/hosts.yml services.yml \
   --check --diff --tags docker_ollama_server --limit ollama_server
 ```
@@ -123,6 +129,8 @@ Selecting only an application tag assumes its host and operational prerequisites
 | PowerDNS authoritative | `127.0.0.1:5300` TCP/UDP | MariaDB database `powerdns` |
 | PowerDNS Recursor | `127.0.0.1:5301` TCP/UDP | `/opt/docker/powerdns-recursor` |
 | Poweradmin | `https://poweradmin.localhost:8445` | MariaDB database `powerdns` |
+| OpenLDAP LDAPS | `ldaps://127.0.0.1:1636` | `/opt/docker/openldap/data` |
+| LDAP Account Manager | `https://lam.localhost:8446` | `/opt/docker/ldap-account-manager` |
 | Zabbix | `http://localhost:8080` | `/opt/docker/zabbix` |
 | MariaDB | loopback administration only | `/opt/docker/mariadb/data` |
 | PostgreSQL | loopback administration only | `/opt/docker/postgres/data` |
@@ -131,7 +139,9 @@ MariaDB and PostgreSQL keep application traffic on internal Docker networks (`tm
 
 PowerDNS authoritative owns the internal `tmnt_powerdns_api` network for Poweradmin API access and the internal `tmnt_powerdns_dns` network for optional recursor zone forwarding. Poweradmin initializes its own tables and the PowerDNS schema in the shared `powerdns` MariaDB database on first startup. The local inventory explicitly publishes the Poweradmin Nginx GUI through the proxy-only `poweradmin_ingress` bridge on `127.0.0.1:8445` as `https://poweradmin.localhost:8445`.
 
-Only the Ollama, Atlassian, PowerDNS, Poweradmin, and shared-database additions currently enforce the repository's strict localhost lab boundary. Treat other plaintext or broadly bound endpoints as known remediation debt; do not expose this WSL environment to an untrusted network.
+OpenLDAP publishes only LDAPS on loopback in the local inventory, generates local TLS when certificate paths are not supplied, and provisions users/groups through `ops_openldap` over CA-validated LDAPS. LDAP Account Manager connects to OpenLDAP over the internal `tmnt_openldap` network and publishes only its HTTPS proxy on `127.0.0.1:8446` in the local inventory.
+
+Treat plaintext or broadly bound endpoints in older roles as known remediation debt; do not expose this WSL environment to an untrusted network.
 
 ## Production deployment
 
@@ -146,13 +156,13 @@ cp -R inventory-production.example inventory-production
 Then:
 
 1. Replace the example hostname and automation user.
-2. Install the physical-host GPU driver outside Ansible. The Docker role manages only NVIDIA Container Toolkit and CDI.
-3. Create the `secured_ai_ingress` network through a separately owned reverse-proxy deployment.
-4. Configure that proxy with a local-PKI certificate, TLS 1.2 or newer, hostname verification, and strong client authentication.
-5. Keep Ollama's port unpublished. The proxy joins `secured_ai_ingress` and forwards only authenticated HTTPS requests to `ollama:11434`.
-6. Store any proxy credentials or private keys in Ansible Vault or an approved secret manager, never in plaintext inventory.
+2. Provide real secrets through Ansible Vault, an approved external secret manager, an uncommitted inventory, secure extra vars, or another documented operator-controlled source.
+3. Provide production PKI certificate paths or intentionally generate target-local CA material and distribute only public CA certificates to clients that should trust it.
+4. Set every published service bind address and port explicitly in inventory.
+5. Keep unauthenticated service APIs unpublished unless a separately owned authenticated TLS ingress is configured.
+6. Install the physical-host GPU driver outside Ansible when NVIDIA acceleration is used. The Docker role manages only NVIDIA Container Toolkit and CDI.
 
-Validate and deploy the currently supported production boundary:
+Validate and deploy a production inventory:
 
 ```bash
 ansible-inventory -i inventory-production/hosts.yml --graph
@@ -167,10 +177,13 @@ Production status:
 - `service_docker`: supports production Docker and optional NVIDIA CDI configuration.
 - `docker_ollama_server`: safe production runtime contract only when its API remains unpublished behind a separately managed authenticated TLS ingress.
 - `ops_ollama_models`: production-safe model pull/removal through container execution; API warm-up stays disabled until verified HTTPS ingress exists.
+- `docker_openldap`: production-capable when inventory supplies real secret material, correct DN/SAN values, verified TLS trust, and deliberate publish/bind settings.
+- `ops_openldap`: production-capable when inventory uses verified LDAPS or StartTLS and real bind credentials from a protected source.
+- `docker_ldap_account_manager`: production-capable when inventory supplies verified LDAPS trust, a least-privilege LDAP bind account, and production web TLS or authenticated ingress.
 - `docker_mariadb`, `docker_postgres`, `ops_mariadb`, `ops_postgres`, `docker_atlassian_lab`, `docker_powerdns`, `docker_powerdns_recursor`, and `docker_poweradmin`: currently localhost-lab only.
 - LibreNMS, NetBox, Zabbix, OpenBao, and test-fixture roles still have production security debt. Do not treat them as production-ready without completing their TLS, secret, ingress, and image-pinning work.
 
-There is not yet a repository-owned production PKI or authenticated ingress role. That missing control is intentional and blocks public production exposure; do not work around it by publishing Ollama directly.
+There is not yet a repository-owned production PKI or authenticated ingress role. Use inventory-supplied certificate paths or a separately owned ingress where those controls are required; do not work around missing authentication by publishing unauthenticated APIs directly.
 
 ## Models, upgrades, and backups
 
@@ -186,7 +199,7 @@ ansible-playbook -K -i inventory-local/hosts.yml services.yml \
 
 Return `update_present_models` to `false` after the refresh. For Ollama server upgrades, change both the pinned version tag and verified multi-platform digest in role defaults or inventory, validate the release, back up model data if required, and deploy the runtime before the operations role.
 
-Back up persistent application directories under `/opt/docker` before database, model, or image migrations. Stopping a Compose project does not remove bind-mounted data:
+Back up persistent application directories under `/opt/docker` before database, directory, model, or image migrations. Stopping a Compose project does not remove bind-mounted data:
 
 ```bash
 sudo systemctl stop docker-ollama-server
@@ -195,6 +208,8 @@ sudo systemctl start docker-ollama-server
 ```
 
 Choose a backup destination outside `/opt/docker` and protect it according to the data it contains.
+
+For OpenLDAP, back up `/opt/docker/openldap/data`, `/opt/docker/openldap/config`, and any generated PKI before schema, image, or DN changes. For LDAP Account Manager, back up `/opt/docker/ldap-account-manager/config` and `/opt/docker/ldap-account-manager/main-config` before upgrades.
 
 ## Stop and remove runtime containers
 
@@ -212,6 +227,8 @@ The roles do not automate destructive data deletion. Confirm exact paths and ver
 - `nvidia-ctk cdi list` must include `nvidia.com/gpu=all`.
 - `docker exec ollama_server ollama ps` reports whether each model is on GPU, CPU, or split.
 - If both models cannot stay loaded, reduce context or parallelism before choosing smaller models.
+- For OpenLDAP, verify LDAPS with `openssl s_client` and query memberOf with `ldapsearch` using the configured CA file.
+- For LDAP Account Manager, inspect `systemctl status docker-ldap-account-manager` and the `lam`/`tls-proxy` container logs.
 - Inspect `systemctl status docker-ollama-server` and `docker logs ollama_server` for startup failures.
 - Run `docker compose ... config --quiet` against rendered Compose before restarting a service.
 - Role-specific variables, trust boundaries, migrations, and reset procedures are documented in each `roles/<role>/README.md`.

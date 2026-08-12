@@ -1,0 +1,2 @@
+TLS_CACERT /etc/ldap/tls/ca.crt
+TLS_REQCERT {{ docker_ldap_account_manager.ldap.validate_certs | ternary('demand', 'never') }}

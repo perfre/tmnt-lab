@@ -1,0 +1,76 @@
+{% for schema in docker_openldap.schemas %}
+include /etc/ldap/schema/{{ schema }}.schema
+{% endfor %}
+
+pidfile /run/slapd/slapd.pid
+argsfile /run/slapd/slapd.args
+
+modulepath /usr/lib/ldap
+moduleload back_{{ docker_openldap.database.backend }}
+{% if docker_openldap.memberof.enabled | bool %}
+moduleload memberof
+{% endif %}
+{% if docker_openldap.refint.enabled | bool %}
+moduleload refint
+{% endif %}
+
+{% if docker_openldap.tls.enabled | bool %}
+TLSCACertificateFile /etc/ldap/tls/ca.crt
+TLSCertificateFile /etc/ldap/tls/server.crt
+TLSCertificateKeyFile /etc/ldap/tls/server.key
+TLSProtocolMin {{ docker_openldap.tls.protocol_min }}
+TLSVerifyClient {{ docker_openldap.tls.verify_client }}
+{% endif %}
+
+database {{ docker_openldap.database.backend }}
+maxsize {{ docker_openldap.database.max_size }}
+suffix "{{ docker_openldap.suffix }}"
+rootdn "{{ docker_openldap.admin.dn }}"
+rootpw {{ docker_openldap_admin_password_hash }}
+directory /var/lib/ldap
+checkpoint {{ docker_openldap.database.checkpoint_kbytes }} {{ docker_openldap.database.checkpoint_minutes }}
+
+{% for index in docker_openldap.database.indexes %}
+index {{ index.attribute }} {{ index.rule }}
+{% endfor %}
+
+security simple_bind=128 update_ssf=128
+
+access to attrs=userPassword,shadowLastChange
+  by self write
+  by anonymous auth
+{% if docker_openldap.access.read_dn | length > 0 %}
+  by dn.exact="{{ docker_openldap.access.read_dn }}" read
+{% endif %}
+  by * none
+
+access to attrs={{ docker_openldap.memberof.memberof_attribute }}
+{% if docker_openldap.access.read_dn | length > 0 %}
+  by dn.exact="{{ docker_openldap.access.read_dn }}" read
+{% endif %}
+  by * read
+
+access to *
+{% if docker_openldap.access.read_dn | length > 0 %}
+  by dn.exact="{{ docker_openldap.access.read_dn }}" read
+{% endif %}
+{% if docker_openldap.access.allow_anonymous_read | bool %}
+  by * read
+{% else %}
+  by users read
+  by * none
+{% endif %}
+
+{% if docker_openldap.memberof.enabled | bool %}
+overlay memberof
+memberof-group-oc {{ docker_openldap.memberof.group_object_class }}
+memberof-member-ad {{ docker_openldap.memberof.member_attribute }}
+memberof-memberof-ad {{ docker_openldap.memberof.memberof_attribute }}
+memberof-dangling {{ docker_openldap.memberof.dangling }}
+memberof-refint {{ docker_openldap.memberof.refint | ternary('TRUE', 'FALSE') }}
+{% endif %}
+
+{% if docker_openldap.refint.enabled | bool %}
+overlay refint
+refint_attributes {{ docker_openldap.refint.attributes | join(' ') }}
+{% endif %}

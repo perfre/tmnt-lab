@@ -1,0 +1,303 @@
+---
+- name: Determine OpenLDAP TLS certificate source
+  ansible.builtin.set_fact:
+    docker_openldap_tls_any_provided: >-
+      {{
+        (docker_openldap.tls.ca_path | length > 0)
+        or (docker_openldap.tls.cert_path | length > 0)
+        or (docker_openldap.tls.key_path | length > 0)
+      }}
+    docker_openldap_tls_all_provided: >-
+      {{
+        (docker_openldap.tls.ca_path | length > 0)
+        and (docker_openldap.tls.cert_path | length > 0)
+        and (docker_openldap.tls.key_path | length > 0)
+      }}
+    docker_openldap_tls_ca_file: >-
+      {{ (docker_openldap.tls.ca_path | length > 0) | ternary(docker_openldap.tls.ca_path, docker_openldap.pki_dir ~ '/ca.crt') }}
+    docker_openldap_tls_cert_file: >-
+      {{ (docker_openldap.tls.cert_path | length > 0) | ternary(docker_openldap.tls.cert_path, docker_openldap.pki_dir ~ '/openldap.crt') }}
+    docker_openldap_tls_key_file: >-
+      {{ (docker_openldap.tls.key_path | length > 0) | ternary(docker_openldap.tls.key_path, docker_openldap.pki_dir ~ '/openldap.key') }}
+
+- name: Validate docker_openldap configuration
+  ansible.builtin.assert:
+    that:
+      - docker_openldap is mapping
+      - docker_openldap.project_name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]+$')
+      - docker_openldap.project_dir is match('^/\\S+$')
+      - docker_openldap.data_dir is match('^/\\S+$')
+      - docker_openldap.config_dir is match('^/\\S+$')
+      - docker_openldap.image_name is not search(':latest$')
+      - docker_openldap.base_image is not search(':latest($|@)')
+      - docker_openldap.base_image is search('@sha256:[0-9a-f]{64}$')
+      - docker_openldap.suffix is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - docker_openldap.admin.dn is match('^[A-Za-z][A-Za-z0-9-]*=[^,=]+(,[A-Za-z][A-Za-z0-9-]*=[^,=]+)*$')
+      - docker_openldap.admin.dn is search(',' ~ (docker_openldap.suffix | regex_escape) ~ '$')
+      - (docker_openldap.admin.password_hash | length > 0) or (docker_openldap.admin.password | length >= 16)
+      - (docker_openldap.admin.password_hash | length > 0) or docker_openldap.admin.password_hash_salt is match('^[./0-9A-Za-z]{8,16}$')
+      - docker_openldap.admin.password not in ['password', 'changeme', 'CHANGE_ME', 'admin']
+      - docker_openldap.database.backend == 'mdb'
+      - docker_openldap.database.max_size | int >= 10485760
+      - docker_openldap.memberof.group_object_class | length > 0
+      - docker_openldap.memberof.member_attribute | length > 0
+      - docker_openldap.memberof.memberof_attribute | length > 0
+      - docker_openldap.refint.attributes is sequence
+      - docker_openldap.refint.attributes | length > 0
+      - docker_openldap.tls.enabled | bool
+      - not docker_openldap_tls_any_provided | bool or docker_openldap_tls_all_provided | bool
+      - docker_openldap.tls.leaf_validity_days | int <= 397
+      - docker_openldap.tls.renew_before_days | int > 0
+      - docker_openldap.tls.renew_before_days | int < docker_openldap.tls.leaf_validity_days | int
+      - docker_openldap.tls.subject_alt_names is sequence
+      - docker_openldap.tls.subject_alt_names | length > 0
+      - docker_openldap.tls.verify_client in ['never', 'allow', 'try', 'demand']
+      - docker_openldap.ldap.container_port | int >= 1024
+      - docker_openldap.ldap.container_port | int <= 65535
+      - docker_openldap.ldaps.enabled | bool
+      - docker_openldap.ldaps.container_port | int >= 1024
+      - docker_openldap.ldaps.container_port | int <= 65535
+      - docker_openldap.ldap.container_port | int != docker_openldap.ldaps.container_port | int
+      - not docker_openldap.ldap.publish | bool or docker_openldap.ldap.bind_address | length > 0
+      - not docker_openldap.ldap.publish | bool or docker_openldap.ldap.published_port | int > 0
+      - not docker_openldap.ldap.publish | bool or docker_openldap.ldap.published_port | int <= 65535
+      - not docker_openldap.ldaps.publish | bool or docker_openldap.ldaps.bind_address | length > 0
+      - not docker_openldap.ldaps.publish | bool or docker_openldap.ldaps.published_port | int > 0
+      - not docker_openldap.ldaps.publish | bool or docker_openldap.ldaps.published_port | int <= 65535
+      - docker_openldap.network.name | length > 0
+      - docker_openldap.network.alias | length > 0
+    fail_msg: >-
+      docker_openldap requires inventory-defined DN, credential, TLS, port, and
+      network settings. Provide either admin.password_hash or admin.password plus
+      password_hash_salt, and provide either all TLS host paths or none so the
+      role can generate a local CA and leaf certificate.
+
+- name: Calculate OpenLDAP administrator password hash
+  ansible.builtin.set_fact:
+    docker_openldap_admin_password_hash: >-
+      {{
+        docker_openldap.admin.password_hash
+        if docker_openldap.admin.password_hash | length > 0
+        else '{CRYPT}' ~ (docker_openldap.admin.password | password_hash(hashtype='sha512', salt=docker_openldap.admin.password_hash_salt))
+      }}
+  no_log: true
+
+- name: Ensure OpenLDAP project directories exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ docker_openldap.project_dir }}"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_openldap.project_dir }}/image"
+      owner: root
+      group: root
+      mode: "0750"
+    - path: "{{ docker_openldap.config_dir }}"
+      owner: root
+      group: "{{ docker_openldap.run_gid }}"
+      mode: "0750"
+    - path: "{{ docker_openldap.data_dir }}"
+      owner: "{{ docker_openldap.run_uid }}"
+      group: "{{ docker_openldap.run_gid }}"
+      mode: "0750"
+    - path: "{{ docker_openldap.pki_dir }}"
+      owner: root
+      group: "{{ docker_openldap.run_gid }}"
+      mode: "0750"
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Generate OpenLDAP local CA private key
+  community.crypto.openssl_privatekey:
+    path: "{{ docker_openldap.pki_dir }}/ca.key"
+    type: ECC
+    curve: secp384r1
+    owner: root
+    group: root
+    mode: "0600"
+  when: not docker_openldap_tls_all_provided | bool
+  no_log: true
+  notify: Restart docker openldap compose
+
+- name: Generate OpenLDAP local CA certificate request
+  community.crypto.openssl_csr:
+    path: "{{ docker_openldap.pki_dir }}/ca.csr"
+    privatekey_path: "{{ docker_openldap.pki_dir }}/ca.key"
+    common_name: "{{ docker_openldap.tls.ca_common_name }}"
+    basic_constraints:
+      - CA:TRUE
+    basic_constraints_critical: true
+    key_usage:
+      - keyCertSign
+      - cRLSign
+    key_usage_critical: true
+    use_common_name_for_san: false
+    owner: root
+    group: root
+    mode: "0600"
+  when: not docker_openldap_tls_all_provided | bool
+  no_log: true
+  notify: Restart docker openldap compose
+
+- name: Issue OpenLDAP local CA certificate
+  community.crypto.x509_certificate:
+    path: "{{ docker_openldap.pki_dir }}/ca.crt"
+    privatekey_path: "{{ docker_openldap.pki_dir }}/ca.key"
+    csr_path: "{{ docker_openldap.pki_dir }}/ca.csr"
+    provider: selfsigned
+    selfsigned_not_after: +3650d
+    owner: root
+    group: root
+    mode: "0644"
+  when: not docker_openldap_tls_all_provided | bool
+  no_log: true
+  notify: Restart docker openldap compose
+
+- name: Generate OpenLDAP TLS private key
+  community.crypto.openssl_privatekey:
+    path: "{{ docker_openldap.pki_dir }}/openldap.key"
+    type: ECC
+    curve: secp384r1
+    owner: root
+    group: "{{ docker_openldap.run_gid }}"
+    mode: "0640"
+  when: not docker_openldap_tls_all_provided | bool
+  no_log: true
+  notify: Restart docker openldap compose
+
+- name: Generate OpenLDAP TLS certificate request
+  community.crypto.openssl_csr:
+    path: "{{ docker_openldap.pki_dir }}/openldap.csr"
+    privatekey_path: "{{ docker_openldap.pki_dir }}/openldap.key"
+    common_name: "{{ docker_openldap.tls.leaf_common_name }}"
+    subject_alt_name: "{{ docker_openldap.tls.subject_alt_names }}"
+    use_common_name_for_san: false
+    basic_constraints:
+      - CA:FALSE
+    basic_constraints_critical: true
+    key_usage:
+      - digitalSignature
+      - keyAgreement
+    key_usage_critical: true
+    extended_key_usage:
+      - serverAuth
+    owner: root
+    group: root
+    mode: "0644"
+  when: not docker_openldap_tls_all_provided | bool
+  no_log: true
+  notify: Restart docker openldap compose
+
+- name: Check for an existing OpenLDAP TLS certificate
+  ansible.builtin.stat:
+    path: "{{ docker_openldap.pki_dir }}/openldap.crt"
+  register: docker_openldap_leaf_certificate
+  when: not docker_openldap_tls_all_provided | bool
+
+- name: Inspect OpenLDAP TLS certificate renewal window
+  community.crypto.x509_certificate_info:
+    path: "{{ docker_openldap.pki_dir }}/openldap.crt"
+    valid_at:
+      renewal_window: "+{{ docker_openldap.tls.renew_before_days }}d"
+  register: docker_openldap_leaf_certificate_info
+  when:
+    - not docker_openldap_tls_all_provided | bool
+    - docker_openldap_leaf_certificate.stat.exists
+
+- name: Issue or renew OpenLDAP TLS certificate
+  community.crypto.x509_certificate:
+    path: "{{ docker_openldap.pki_dir }}/openldap.crt"
+    csr_path: "{{ docker_openldap.pki_dir }}/openldap.csr"
+    ownca_path: "{{ docker_openldap.pki_dir }}/ca.crt"
+    ownca_privatekey_path: "{{ docker_openldap.pki_dir }}/ca.key"
+    provider: ownca
+    ownca_not_after: "+{{ docker_openldap.tls.leaf_validity_days }}d"
+    force: >-
+      {{
+        (not docker_openldap_leaf_certificate.stat.exists)
+        or (not (docker_openldap_leaf_certificate_info.valid_at.renewal_window | default(false)))
+      }}
+    owner: root
+    group: root
+    mode: "0644"
+  when: not docker_openldap_tls_all_provided | bool
+  no_log: true
+  notify: Restart docker openldap compose
+
+- name: Render OpenLDAP image files
+  ansible.builtin.template:
+    src: "{{ item.src }}"
+    dest: "{{ docker_openldap.project_dir }}/image/{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - src: Dockerfile.j2
+      dest: Dockerfile
+      mode: "0644"
+    - src: .dockerignore.j2
+      dest: .dockerignore
+      mode: "0644"
+    - src: entrypoint.sh.j2
+      dest: entrypoint.sh
+      mode: "0755"
+  loop_control:
+    label: "{{ item.dest }}"
+  notify: Restart docker openldap compose
+
+- name: Render OpenLDAP slapd configuration
+  ansible.builtin.template:
+    src: slapd.conf.j2
+    dest: "{{ docker_openldap.config_dir }}/slapd.conf"
+    owner: root
+    group: "{{ docker_openldap.run_gid }}"
+    mode: "0640"
+  no_log: true
+  diff: false
+  notify: Restart docker openldap compose
+
+- name: Render OpenLDAP Docker Compose file
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ docker_openldap.project_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker openldap compose
+
+- name: Install OpenLDAP Compose systemd unit
+  ansible.builtin.template:
+    src: docker-openldap.service.j2
+    dest: /etc/systemd/system/docker-openldap.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart docker openldap compose
+
+- name: Enable OpenLDAP Compose systemd unit
+  ansible.builtin.systemd:
+    name: docker-openldap
+    enabled: true
+    daemon_reload: true
+
+- name: Start or update OpenLDAP Compose project
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_openldap.project_dir }}"
+    project_name: "{{ docker_openldap.project_name }}"
+    files:
+      - compose.yml
+    docker_cli: "{{ docker_openldap.docker_binary }}"
+    state: present
+    pull: "{{ docker_openldap.pull_policy }}"
+    build: "{{ docker_openldap.build }}"
+    recreate: "{{ docker_openldap.recreate }}"
+    remove_orphans: "{{ docker_openldap.remove_orphans | bool }}"
+    wait: "{{ docker_openldap.wait | bool }}"
+    wait_timeout: "{{ docker_openldap.wait_timeout }}"
+  when: docker_openldap.apply | bool

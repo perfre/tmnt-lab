@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenLDAP Docker Compose project
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory={{ docker_openldap.project_dir }}
+ExecStart={{ docker_openldap.docker_binary }} compose -f {{ docker_openldap.project_dir }}/compose.yml up -d --build --pull {{ docker_openldap.pull_policy }} --remove-orphans
+ExecStop={{ docker_openldap.docker_binary }} compose -f {{ docker_openldap.project_dir }}/compose.yml down
+TimeoutStartSec=180
+
+[Install]
+WantedBy=multi-user.target
